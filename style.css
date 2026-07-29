@@ -1,0 +1,697 @@
+/* =========================================================
+   SCOTLAND FAMILY ROAD TRIP — Design tokens
+   Direction: "Single-track Highland road" — a dashed route
+   line with passing-places is the signature motif, echoing
+   the actual roads this trip will drive on.
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Fjalla+One&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Colour: named, deliberate, drawn from the Highland landscape */
+  --glen:        #16241C;   /* deep glen green — app background */
+  --glen-2:      #1D2F24;   /* panel background, one step lighter */
+  --loch:        #223B45;   /* loch blue — cards / surfaces */
+  --loch-2:      #2C4A56;   /* loch blue, hover/active surface */
+  --mist:        #7E9488;   /* misty green-grey — secondary text */
+  --heather:     #8D6FA3;   /* thistle purple — secondary accent */
+  --gold:        #D8A73B;   /* whisky gold — primary accent / CTA */
+  --gold-dim:    #A8802C;
+  --parchment:   #F3EEE1;   /* primary text on dark, & light surfaces */
+  --stone:       #B7C4BB;   /* muted body text on dark */
+  --danger:      #C1543B;
+
+  --font-display: 'Fjalla One', 'Arial Narrow', sans-serif;
+  --font-body:    'Work Sans', -apple-system, sans-serif;
+  --font-mono:    'IBM Plex Mono', monospace;
+
+  --radius: 10px;
+  --radius-lg: 16px;
+  --nav-height: 64px;
+  --header-height: 128px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--glen);
+  color: var(--parchment);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100vh;
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 400;
+  margin: 0;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+
+/* ---------- App shell ---------- */
+
+.app-header {
+  padding: 18px 18px 14px;
+  background: linear-gradient(180deg, var(--glen-2), var(--glen));
+  border-bottom: 1px solid rgba(216, 167, 59, 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-header__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.app-title {
+  font-size: 1.35rem;
+  color: var(--parchment);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-title .flag { font-size: 1.1rem; }
+
+.countdown-chip {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: rgba(216, 167, 59, 0.14);
+  color: var(--gold);
+  border: 1px solid rgba(216, 167, 59, 0.4);
+  border-radius: 999px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.app-subtitle {
+  color: var(--mist);
+  font-size: 0.82rem;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 18px 16px 40px;
+}
+
+.screen { display: none; animation: fadeIn 0.25s ease; }
+.screen.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Bottom nav ---------- */
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--glen-2);
+  border-top: 1px solid rgba(216, 167, 59, 0.18);
+  display: flex;
+  z-index: 30;
+}
+
+.nav-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--mist);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 0.66rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.nav-btn svg { width: 20px; height: 20px; stroke: var(--mist); fill: none; }
+
+.nav-btn.active { color: var(--gold); }
+.nav-btn.active svg { stroke: var(--gold); }
+
+/* ---------- Cards ---------- */
+
+.card {
+  background: var(--loch);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.card__title {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card__title svg { width: 15px; height: 15px; stroke: var(--gold); fill: none; }
+
+.section-title {
+  font-size: 1.5rem;
+  margin-bottom: 14px;
+  color: var(--parchment);
+}
+
+/* ---------- Signature: single-track road / travel path ---------- */
+
+.road {
+  position: relative;
+  padding-left: 34px;
+}
+
+.road::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background-image: linear-gradient(var(--gold) 60%, transparent 40%);
+  background-size: 2px 14px;
+  background-repeat: repeat-y;
+  opacity: 0.85;
+}
+
+.road-stop {
+  position: relative;
+  padding-bottom: 22px;
+}
+
+.road-stop:last-child { padding-bottom: 0; }
+
+.road-stop::before {
+  content: "";
+  position: absolute;
+  left: -34px;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--glen-2);
+  border: 2px solid var(--gold);
+}
+
+.road-stop.is-current::before {
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(216,167,59,0.2);
+}
+
+.road-stop.is-done::before {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+/* passing place — small tab jutting off the road, marks a fuel/rest stop */
+.road-stop.is-stop::after {
+  content: "";
+  position: absolute;
+  left: -40px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  background: var(--heather);
+  border-radius: 1px;
+}
+
+.road-stop__label {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--parchment);
+}
+
+.road-stop__meta {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--mist);
+  margin-top: 2px;
+}
+
+/* ---------- Grid stat blocks ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.stat {
+  background: var(--glen-2);
+  border-radius: var(--radius);
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.stat__value {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  color: var(--gold);
+}
+
+.stat__label {
+  font-size: 0.62rem;
+  color: var(--mist);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--gold);
+  color: var(--glen);
+  border: none;
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.btn.btn--ghost {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid rgba(216,167,59,0.5);
+}
+
+.btn.btn--small { padding: 6px 10px; font-size: 0.75rem; }
+.btn svg { width: 14px; height: 14px; }
+
+/* ---------- Day accordion (Itinerary) ---------- */
+
+.day {
+  background: var(--loch);
+  border-radius: var(--radius-lg);
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.day__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.day__head-left { display: flex; align-items: center; gap: 12px; }
+
+.day__badge {
+  font-family: var(--font-mono);
+  background: var(--glen-2);
+  color: var(--gold);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+}
+
+.day__title { font-family: var(--font-display); font-size: 0.95rem; letter-spacing: 0.02em; }
+.day__route { font-size: 0.72rem; color: var(--mist); margin-top: 2px; }
+
+.day__chevron {
+  width: 16px; height: 16px;
+  stroke: var(--mist); fill: none;
+  transition: transform 0.2s ease;
+}
+
+.day.open .day__chevron { transform: rotate(180deg); }
+
+.day__body {
+  display: none;
+  padding: 0 16px 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.day.open .day__body { display: block; }
+
+.attraction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--glen-2);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 0.74rem;
+  color: var(--stone);
+  margin: 8px 6px 0 0;
+}
+
+.attraction-chip::before { content: "◆"; color: var(--heather); font-size: 0.6rem; }
+
+/* ---------- Families ---------- */
+
+.family-card { display: flex; flex-direction: column; gap: 10px; }
+.family-card__row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.field label {
+  font-size: 0.62rem;
+  color: var(--mist);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.field input, .field select {
+  background: var(--glen-2);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--parchment);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.field input:focus, .field select:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.family-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* ---------- Expenses ---------- */
+
+.expense-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.expense-item:last-child { border-bottom: none; }
+
+.expense-item__meta { display: flex; flex-direction: column; }
+.expense-item__cat { font-size: 0.62rem; color: var(--heather); text-transform: uppercase; letter-spacing: 0.05em; }
+.expense-item__note { font-size: 0.85rem; }
+.expense-item__amount { font-family: var(--font-mono); color: var(--gold); font-size: 0.95rem; }
+
+.expense-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.expense-form .field--full { grid-column: 1 / -1; }
+
+.split-summary {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--stone);
+  line-height: 1.6;
+}
+
+/* ---------- Packing checklist ---------- */
+
+.packing-group__title {
+  font-size: 0.72rem;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 18px 0 8px;
+}
+
+.packing-group:first-child .packing-group__title { margin-top: 0; }
+
+.pack-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+}
+
+.pack-item input { accent-color: var(--gold); width: 17px; height: 17px; }
+.pack-item.checked .pack-item__label { color: var(--mist); text-decoration: line-through; }
+.pack-item__label { font-size: 0.88rem; }
+
+.progress-bar {
+  height: 7px;
+  background: var(--glen-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--heather), var(--gold));
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* ---------- Accommodation ---------- */
+
+.accom-card__badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  background: rgba(141, 111, 163, 0.2);
+  color: var(--heather);
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-bottom: 8px;
+}
+
+.accom-card__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  padding: 5px 0;
+  color: var(--stone);
+}
+.accom-card__row b { color: var(--parchment); font-weight: 500; }
+
+.action-row { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ---------- More / list menu ---------- */
+
+.menu-list { display: flex; flex-direction: column; gap: 8px; }
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--loch);
+  border-radius: var(--radius);
+  padding: 13px 15px;
+  border: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer;
+}
+.menu-item__left { display: flex; align-items: center; gap: 12px; font-size: 0.9rem; }
+.menu-item svg { width: 17px; height: 17px; stroke: var(--gold); fill: none; }
+.menu-item__chev { stroke: var(--mist) !important; width: 14px !important; height: 14px !important; }
+
+/* ---------- Weather ---------- */
+.weather-row { display: flex; align-items: center; justify-content: space-between; }
+.weather-temp { font-family: var(--font-mono); font-size: 1.6rem; color: var(--gold); }
+.weather-note { font-size: 0.72rem; color: var(--mist); margin-top: 2px; }
+
+/* ---------- Utility ---------- */
+.muted { color: var(--mist); font-size: 0.8rem; }
+.empty-state { text-align: center; padding: 30px 10px; color: var(--mist); }
+.empty-state svg { width: 34px; height: 34px; stroke: var(--mist); fill: none; margin-bottom: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ---------- Identity overlay ---------- */
+
+.identity-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 16, 12, 0.88);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.identity-card {
+  background: var(--loch);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  max-width: 360px;
+  width: 100%;
+  border: 1px solid rgba(216,167,59,0.25);
+}
+
+.identity-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.identity-options button {
+  background: var(--glen-2);
+  color: var(--parchment);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius);
+  padding: 11px 14px;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.identity-options button:hover,
+.identity-options button:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+/* ---------- Weather duo ---------- */
+
+.weather-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.weather-duo__col {
+  background: var(--glen-2);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.weather-duo__label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--mist);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+/* ---------- Current leg card ---------- */
+
+.leg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.leg-endpoint {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+.leg-arrow {
+  color: var(--gold);
+  font-size: 1.1rem;
+}
+
+.leg-stats {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--stone);
+}
+
+.leg-stats b { color: var(--gold); font-weight: 500; }
+
+.break-note {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--heather);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.break-note::before { content: "☕"; }
+
+/* ---------- Map screen ---------- */
+
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: var(--loch);
+  color: var(--parchment);
+}
+
+.family-location-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.family-location-row:last-child { border-bottom: none; }
+.family-location-row__name { font-size: 0.88rem; }
+.family-location-row__meta { font-family: var(--font-mono); font-size: 0.68rem; color: var(--mist); text-align: right; }
+
+/* ---------- Meal editor (inside itinerary days) ---------- */
+
+.meal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.meal-row label {
+  width: 66px;
+  font-size: 0.68rem;
+  color: var(--mist);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.meal-row input {
+  flex: 1;
+  background: var(--glen-2);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--parchment);
+  font-size: 0.82rem;
+  font-family: inherit;
+}

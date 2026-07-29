@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16241C">
+<title>Scotland Family Road Trip</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+
+<!-- Firebase (Realtime Database) — compat SDK, no build step needed -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="firebase-config.js"></script>
+
+<div id="identityOverlay" class="identity-overlay" style="display:none;">
+  <div class="identity-card">
+    <div class="display" style="font-size:1.1rem; margin-bottom:6px;">Who's this?</div>
+    <p class="muted" style="margin-top:0;">Pick your family so live location and packing sync to the right name.</p>
+    <div id="identityOptions" class="identity-options"></div>
+    <p class="muted" style="font-size:0.68rem; margin-top:14px;">This shares your live location with the other 4 families while the app is open. You can turn it off anytime in Settings.</p>
+  </div>
+</div>
+
+<header class="app-header">
+  <div class="app-header__top">
+    <div class="app-title"><span class="flag">🏴</span> Scotland Road Trip</div>
+    <div class="countdown-chip" id="countdownChip">--</div>
+  </div>
+  <div class="app-subtitle" id="headerSubtitle">1–6 AUG 2026 · 5 FAMILIES · 13 TRAVELLERS</div>
+</header>
+
+<main>
+
+  <!-- ============ HOME ============ -->
+  <section class="screen active" id="screen-home">
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>
+        TRIP READINESS
+      </div>
+      <div class="muted" id="readinessLabel" style="margin-bottom:4px;">Checking…</div>
+      <div class="progress-bar"><div class="progress-bar__fill" id="readinessFill" style="width:0%;"></div></div>
+      <div id="readinessDetails" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        TRAVEL PATH
+      </div>
+      <div class="road" id="travelPathRoad"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        TODAY'S PLAN
+      </div>
+      <div id="todayPlan"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        CURRENT LEG
+      </div>
+      <div id="currentLegCard" class="muted">Loading route info…</div>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat"><div class="stat__value" id="statDistance">--</div><div class="stat__label">Total Miles</div></div>
+      <div class="stat"><div class="stat__value" id="statFuelStops">3</div><div class="stat__label">Fuel Stops</div></div>
+      <div class="stat"><div class="stat__value" id="statNights">5</div><div class="stat__label">Nights Away</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h10a4 4 0 004-4M7 15V9a5 5 0 0110 0v6"/></svg>
+        WEATHER
+      </div>
+      <div class="weather-duo">
+        <div class="weather-duo__col">
+          <div class="weather-duo__label">NOW · <span id="weatherLocationLabel">--</span></div>
+          <div class="weather-row">
+            <div>
+              <div class="weather-temp" id="weatherTemp">--°C</div>
+              <div class="weather-note" id="weatherNote">Loading…</div>
+            </div>
+            <div style="font-size:1.8rem;" id="weatherEmoji">⛅</div>
+          </div>
+        </div>
+        <div class="weather-duo__col">
+          <div class="weather-duo__label">NEXT · <span id="weatherNextLocationLabel">--</span></div>
+          <div class="weather-row">
+            <div>
+              <div class="weather-temp" id="weatherNextTemp" style="color:var(--heather);">--°C</div>
+              <div class="weather-note" id="weatherNextNote">Loading…</div>
+            </div>
+            <div style="font-size:1.8rem;" id="weatherNextEmoji">⛅</div>
+          </div>
+        </div>
+      </div>
+      <div id="weatherStrip" style="display:flex; gap:6px; margin-top:12px;"></div>
+      <div class="muted" id="weatherStaleness" style="margin-top:8px; font-size:0.68rem;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+        TONIGHT'S ACCOMMODATION
+      </div>
+      <div id="homeAccom"></div>
+    </div>
+
+  </section>
+
+  <!-- ============ ITINERARY ============ -->
+  <section class="screen" id="screen-itinerary">
+    <h2 class="section-title">Itinerary</h2>
+    <div id="dayList"></div>
+  </section>
+
+  <!-- ============ MAP / LIVE LOCATION ============ -->
+  <section class="screen" id="screen-map">
+    <h2 class="section-title">Live Location</h2>
+    <div class="card" id="locationStatusCard">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-11a7 7 0 0114 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        SHARING STATUS
+      </div>
+      <div id="locationStatusText" class="muted">Checking…</div>
+      <div class="action-row">
+        <button class="btn btn--small" id="toggleSharingBtn">Turn on sharing</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding:8px;">
+      <div id="liveMap" style="height:340px; border-radius:12px; overflow:hidden;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M2 21v-2a5 5 0 015-5h4a5 5 0 015 5v2"/></svg>
+        LAST KNOWN POSITIONS
+      </div>
+      <div id="familyLocationList"></div>
+    </div>
+  </section>
+
+  <!-- ============ FAMILIES ============ -->
+  <section class="screen" id="screen-families">
+    <h2 class="section-title">Families</h2>
+    <div id="familyList"></div>
+  </section>
+
+  <!-- ============ MORE ============ -->
+  <section class="screen" id="screen-more">
+    <h2 class="section-title">More</h2>
+    <div class="menu-list">
+      <div class="menu-item" data-open="screen-accommodation">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>Accommodation</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="menu-item" data-open="screen-packing">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>Packing</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="menu-item" data-open="screen-weathermore">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h10a4 4 0 004-4M7 15V9a5 5 0 0110 0v6"/></svg>Weather Forecast</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="menu-item" data-open="screen-expenses">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Expenses <span class="muted" style="font-size:0.65rem; margin-left:4px;">(paused)</span></div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="menu-item" data-open="screen-emergency">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86l-8.18 14.14A2 2 0 004 21h16a2 2 0 001.89-2.99L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Emergency</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="menu-item" data-open="screen-notes">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5"/></svg>Notes</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="menu-item" data-open="screen-settings">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <!-- Sub-screens reached from More -->
+    <div style="margin-top:20px;">
+
+      <div id="screen-accommodation" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 10px;">Accommodation</h3>
+        <div id="accomList"></div>
+      </div>
+
+      <div id="screen-packing" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 4px;">Packing Checklist</h3>
+        <div class="muted" id="packProgressLabel">0 of 0 packed</div>
+        <div class="progress-bar"><div class="progress-bar__fill" id="packProgressFill" style="width:0%;"></div></div>
+        <div id="packList" style="margin-top:14px;"></div>
+      </div>
+
+      <div id="screen-weathermore" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 10px;">Weather Forecast</h3>
+        <div class="card" id="forecastCard">
+          <p class="muted">Loading forecast…</p>
+        </div>
+      </div>
+
+      <div id="screen-expenses" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 4px;">Expenses</h3>
+        <p class="muted" style="margin:0 0 14px;">Set aside for now — pick this back up when you're ready to start tracking spend.</p>
+
+        <div class="card">
+          <div class="card__title">
+            <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            GROUP TOTAL & SPLIT
+          </div>
+          <div class="split-summary" id="expenseSummary"></div>
+        </div>
+
+        <div class="card">
+          <div class="card__title">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            ADD EXPENSE
+          </div>
+          <form class="expense-form" id="expenseForm">
+            <div class="field field--full">
+              <label>What for</label>
+              <input type="text" id="expNote" placeholder="e.g. Petrol at Southwaite" required>
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select id="expCategory"></select>
+            </div>
+            <div class="field">
+              <label>Amount (£)</label>
+              <input type="number" id="expAmount" min="0" step="0.01" required>
+            </div>
+            <div class="field field--full">
+              <label>Paid by</label>
+              <select id="expFamily"></select>
+            </div>
+            <div class="field field--full">
+              <button class="btn" type="submit" style="width:100%;">Add Expense</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card__title">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            LOG
+          </div>
+          <div id="expenseList"></div>
+        </div>
+      </div>
+
+      <div id="screen-emergency" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 10px;">Emergency</h3>
+        <div class="card">
+          <div class="accom-card__row"><span>Emergency services</span><b>999 / 112</b></div>
+          <div class="accom-card__row"><span>NHS non-emergency</span><b>111</b></div>
+          <div class="accom-card__row"><span>Police (non-emergency)</span><b>101</b></div>
+          <div class="accom-card__row"><span>Breakdown cover</span><b id="breakdownNumber">Add your number in Settings</b></div>
+        </div>
+      </div>
+
+      <div id="screen-notes" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 10px;">Trip Notes</h3>
+        <div class="card">
+          <textarea id="notesArea" placeholder="Jot down anything the group needs to remember..." style="width:100%; min-height:160px; background:var(--glen-2); border:1px solid rgba(255,255,255,0.08); border-radius:8px; color:var(--parchment); padding:10px; font-family:inherit;"></textarea>
+        </div>
+      </div>
+
+      <div id="screen-settings" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 10px;">Settings</h3>
+        <div class="card">
+          <div class="field" style="margin-bottom:12px;">
+            <label>You are</label>
+            <div id="settingsIdentity" class="muted">Not set</div>
+          </div>
+          <button class="btn btn--ghost btn--small" id="changeIdentityBtn">Change identity</button>
+        </div>
+        <div class="card">
+          <div class="field" style="margin-bottom:12px;">
+            <label>Breakdown cover number</label>
+            <input type="text" id="settingsBreakdown" placeholder="e.g. 0800 XXX XXXX">
+          </div>
+          <button class="btn" id="saveSettingsBtn">Save</button>
+          <p class="muted" style="margin-top:14px;">Packing, notes and expenses are stored on this device only. Location is the one thing shared live between families — see the Map tab.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-screen="screen-home">
+    <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Home
+  </button>
+  <button class="nav-btn" data-screen="screen-itinerary">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Itinerary
+  </button>
+  <button class="nav-btn" data-screen="screen-map">
+    <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-11a7 7 0 0114 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Map
+  </button>
+  <button class="nav-btn" data-screen="screen-families">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="8" r="2.5"/><path d="M2 21v-2a5 5 0 015-5h4a5 5 0 015 5v2M17 13.5a4 4 0 013 3.9V21"/></svg>Families
+  </button>
+  <button class="nav-btn" data-screen="screen-more">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>More
+  </button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>
