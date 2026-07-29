@@ -695,3 +695,143 @@ main {
   font-size: 0.82rem;
   font-family: inherit;
 }
+
+/* ---------------- Countdown card ---------------- */
+
+.countdown-card { text-align: center; }
+
+.countdown-big {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  color: var(--gold);
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  letter-spacing: 0.02em;
+}
+
+.countdown-big small {
+  font-size: 0.55rem;
+  color: var(--mist);
+  margin-left: 2px;
+  text-transform: uppercase;
+}
+
+/* ---------------- Travel path mini-map ---------------- */
+
+.travel-path-map {
+  height: 190px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* ---------------- Small tile row (sunrise / midge) ---------------- */
+
+.tile-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.tile {
+  background: var(--loch);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.tile__icon { font-size: 1.4rem; }
+.tile__label { font-size: 0.64rem; color: var(--mist); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+.tile__value { font-family: var(--font-mono); font-size: 0.92rem; color: var(--gold); margin-top: 4px; }
+
+/* ---------------- Packing tile on Home ---------------- */
+
+.packing-tile { cursor: pointer; }
+
+/* ---------------- Modals (packing / forecast) ---------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 16, 12, 0.82);
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal-card {
+  background: var(--glen-2);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-top: 1px solid rgba(216,167,59,0.25);
+}
+
+.modal-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.modal-close {
+  background: var(--glen);
+  border: none;
+  color: var(--parchment);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.add-item-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.add-item-row input {
+  flex: 2;
+  background: var(--glen);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--parchment);
+  font-size: 0.82rem;
+}
+.add-item-row select {
+  flex: 1;
+  background: var(--glen);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 8px 6px;
+  color: var(--parchment);
+  font-size: 0.78rem;
+}
+
+.pack-item { justify-content: space-between; }
+.pack-item__hide {
+  background: none;
+  border: none;
+  color: var(--mist);
+  font-size: 0.68rem;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 4px 6px;
+}
+.pack-item__source {
+  font-size: 0.6rem;
+  color: var(--heather);
+  margin-left: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

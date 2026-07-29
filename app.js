@@ -9,14 +9,14 @@
 
 const STORAGE_KEYS = {
   families: 'sfrt_families',
-  expenses: 'sfrt_expenses',
-  packing:  'sfrt_packing',
   notes:    'sfrt_notes',
   settings: 'sfrt_settings',
   identity: 'sfrt_identity',
   sharing:  'sfrt_sharing',
   meals:    'sfrt_meals',
-  weatherCache: 'sfrt_weather_cache'
+  weatherCache: 'sfrt_weather_cache',
+  packChecked: 'sfrt_packing_checked',
+  packHidden:  'sfrt_packing_hidden'
 };
 
 let TRIP = null; // loaded from data/itinerary.json
@@ -41,17 +41,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderReadiness();
   renderItinerary();
   renderFamilies();
-  setupExpenseForm();
-  renderExpenses();
   renderAccommodation();
-  renderPacking();
   loadNotes();
   loadSettings();
   tickCountdown();
   setInterval(tickCountdown, 60 * 1000);
+  renderCountdownCard();
+  setInterval(renderCountdownCard, 1000);
   loadWeather();
-  loadForecastScreen();
   renderCurrentLegCard();
+  initTravelPathMap();
+  initPackingSync();
+  setupPackingModal();
+  setupForecastModal();
   if (isSharing()) startSharing();
 });
 
@@ -122,24 +124,14 @@ function tickCountdown() {
   }
 }
 
-/* ---------------- Home: Travel Path ---------------- */
+/* ---------------- Home ---------------- */
+
+function isPreTrip() {
+  if (!TRIP.project || !TRIP.project.start_date) return false;
+  return new Date() < new Date(TRIP.project.start_date + 'T00:00:00');
+}
 
 function renderHome() {
-  const road = document.getElementById('travelPathRoad');
-  road.innerHTML = '';
-  const currentIndex = getCurrentPathIndex();
-
-  TRIP.travelPath.forEach((stop, i) => {
-    const div = document.createElement('div');
-    let cls = 'road-stop';
-    if (i < currentIndex) cls += ' is-done';
-    if (i === currentIndex) cls += ' is-current';
-    if (stop.icon === 'fuel' || stop.icon === 'coffee') cls += ' is-stop';
-    div.className = cls;
-    div.innerHTML = `<div class="road-stop__label">${iconEmoji(stop.icon)} ${stop.label}</div>`;
-    road.appendChild(div);
-  });
-
   // Today's plan
   const todayDiv = document.getElementById('todayPlan');
   const today = getTodayItineraryDay();
@@ -158,10 +150,20 @@ function renderHome() {
   document.getElementById('statDistance').textContent = '~950';
   document.getElementById('statNights').textContent = TRIP.itinerary.length - 1;
 
-  // Tonight's accommodation
+  // Accommodation card — reframed if the trip hasn't started
   const accomDiv = document.getElementById('homeAccom');
-  const stay = getTonightAccommodation();
-  accomDiv.innerHTML = stay ? accomCardHTML(stay) : `<div class="muted">No accommodation booked for tonight.</div>`;
+  const labelEl = document.getElementById('homeAccomLabel');
+  if (isPreTrip()) {
+    if (labelEl) labelEl.textContent = 'FIRST NIGHT';
+    const stay = TRIP.accommodation[0];
+    accomDiv.innerHTML = stay
+      ? `<div class="muted" style="margin-bottom:8px;">Not there yet — this is where Day 1 ends.</div>` + accomCardHTML(stay)
+      : `<div class="muted">No accommodation booked.</div>`;
+  } else {
+    if (labelEl) labelEl.textContent = "TONIGHT'S ACCOMMODATION";
+    const stay = getTonightAccommodation();
+    accomDiv.innerHTML = stay ? accomCardHTML(stay) : `<div class="muted">No accommodation booked for tonight.</div>`;
+  }
 }
 
 function iconEmoji(icon) {
@@ -201,6 +203,38 @@ function getTonightAccommodation() {
   return TRIP.accommodation.find(a => a.day.includes(dayNum)) || TRIP.accommodation[0] || null;
 }
 
+/* ---------------- Postcode geocoding (postcodes.io, no API key) ---------------- */
+
+async function geocodePostcode(postcode) {
+  if (!postcode) return null;
+  const key = 'sfrt_geocode_' + postcode.trim().toUpperCase();
+  const cached = localStorage.getItem(key);
+  if (cached) return JSON.parse(cached);
+  try {
+    const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcode.trim())}`);
+    const data = await res.json();
+    if (data.status === 200 && data.result) {
+      const loc = { lat: data.result.latitude, lng: data.result.longitude };
+      localStorage.setItem(key, JSON.stringify(loc));
+      return loc;
+    }
+  } catch (err) {
+    console.error('Postcode geocode failed', err);
+  }
+  return null;
+}
+
+async function getHomeLocation() {
+  const id = getIdentity();
+  const families = loadFamilies();
+  const fam = families.find(f => f.name === id);
+  if (fam && fam.startingPostcode) {
+    const loc = await geocodePostcode(fam.startingPostcode);
+    if (loc) return { ...loc, label: `${fam.name}'s home` };
+  }
+  return { lat: 52.5, lng: -1.7, label: 'Home' }; // rough England fallback if no postcode yet
+}
+
 function accomCardHTML(stay) {
   const mapsUrl = stay.lat && stay.lng
     ? `https://www.google.com/maps/search/?api=1&query=${stay.lat},${stay.lng}`
@@ -220,7 +254,118 @@ function accomCardHTML(stay) {
   `;
 }
 
+/* ---------------- Countdown card (per-family, live) ---------------- */
+
+function getCountdownTarget() {
+  const id = getIdentity();
+  const families = loadFamilies();
+  const fam = families.find(f => f.name === id);
+  const leaveTime = (fam && fam.recommendedLeaveHome) ? fam.recommendedLeaveHome : '08:00';
+  const leaveHomeTarget = new Date(`${TRIP.project.start_date}T${leaveTime}:00`);
+  const meetTarget = new Date(`${TRIP.project.start_date}T08:00:00`);
+  const now = new Date();
+
+  if (now < leaveHomeTarget) {
+    return { phase: 'leave', target: leaveHomeTarget, label: id ? `${id}, leave home by` : 'Leave home by', timeLabel: leaveTime };
+  }
+  if (now < meetTarget) {
+    return { phase: 'meet', target: meetTarget, label: 'Be at Moto Knutsford by', timeLabel: '08:00' };
+  }
+  return { phase: 'underway' };
+}
+
+function renderCountdownCard() {
+  const card = document.getElementById('countdownCard');
+  if (!card || !TRIP.project.start_date) return;
+  const info = getCountdownTarget();
+
+  if (info.phase === 'underway') {
+    const end = new Date(TRIP.project.end_date + 'T18:00:00');
+    const now = new Date();
+    if (now > end) {
+      card.innerHTML = `<div class="countdown-big" style="font-size:1.1rem;">Trip complete 🏴</div><div class="muted">Hope it was unforgettable.</div>`;
+    } else {
+      const start = new Date(TRIP.project.start_date + 'T00:00:00');
+      const dayNum = Math.min(TRIP.project.duration_days, Math.floor((now - start) / (1000*60*60*24)) + 1);
+      card.innerHTML = `<div class="countdown-big" style="font-size:1.3rem;">DAY ${dayNum} OF ${TRIP.project.duration_days}</div><div class="muted">Trip's underway — check Itinerary for today's plan.</div>`;
+    }
+    return;
+  }
+
+  const diffMs = info.target - new Date();
+  const totalSec = Math.max(0, Math.floor(diffMs / 1000));
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+
+  card.innerHTML = `
+    <div class="muted" style="margin-bottom:6px;">${info.label} <b style="color:var(--gold);">${info.timeLabel}</b></div>
+    <div class="countdown-big">
+      <span>${String(days).padStart(2,'0')}<small>d</small></span>
+      <span>${String(hours).padStart(2,'0')}<small>h</small></span>
+      <span>${String(mins).padStart(2,'0')}<small>m</small></span>
+      <span>${String(secs).padStart(2,'0')}<small>s</small></span>
+    </div>
+  `;
+}
+
+/* ---------------- Travel path mini-map (Home tile) ---------------- */
+
+let travelPathMap = null;
+
+async function initTravelPathMap() {
+  if (typeof L === 'undefined') return;
+  const container = document.getElementById('travelPathMap');
+  if (!container) return;
+
+  if (travelPathMap) { travelPathMap.remove(); travelPathMap = null; }
+  travelPathMap = L.map('travelPathMap', {
+    zoomControl: false, attributionControl: false,
+    dragging: false, scrollWheelZoom: false, doubleClickZoom: false, tap: false
+  }).setView([56.6, -4.0], 6);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(travelPathMap);
+
+  const routeCoords = TRIP.travelPath
+    .map(stop => TRIP.locations[stop.label])
+    .filter(Boolean)
+    .map(l => [l.lat, l.lng]);
+
+  if (routeCoords.length) {
+    L.polyline(routeCoords, { color: '#D8A73B', weight: 3, dashArray: '6,6' }).addTo(travelPathMap);
+    travelPathMap.fitBounds(routeCoords, { padding: [16, 16] });
+  }
+
+  container.onclick = () => {
+    const btn = document.querySelector('.nav-btn[data-screen="screen-map"]');
+    if (btn) btn.click();
+  };
+
+  // Current position marker — home (pre-trip, geocoded if possible) or current travel-path stop
+  let currentLoc = null;
+  if (isPreTrip()) {
+    currentLoc = await getHomeLocation();
+  } else {
+    const idx = getCurrentPathIndex();
+    const label = TRIP.travelPath[idx] && TRIP.travelPath[idx].label;
+    currentLoc = label && TRIP.locations[label];
+  }
+  if (currentLoc && typeof currentLoc.lat === 'number' && travelPathMap) {
+    L.circleMarker([currentLoc.lat, currentLoc.lng], {
+      radius: 8, color: '#D8A73B', fillColor: '#D8A73B', fillOpacity: 0.9, weight: 2
+    }).addTo(travelPathMap);
+  }
+}
+
 /* ---------------- Itinerary ---------------- */
+
+function buildRouteWaypoints(day) {
+  const id = getIdentity();
+  const fam = id ? loadFamilies().find(f => f.name === id) : null;
+  const postcode = fam && fam.startingPostcode;
+  return day.route.map(p => (p === 'Home' ? (postcode || null) : p)).filter(Boolean);
+}
 
 function renderItinerary() {
   const list = document.getElementById('dayList');
@@ -257,7 +402,7 @@ function renderItinerary() {
 
         <div class="action-row">
           <a class="btn btn--small btn--ghost" target="_blank" rel="noopener"
-             href="https://www.google.com/maps/dir/${day.route.map(encodeURIComponent).join('/')}">
+             href="https://www.google.com/maps/dir/${buildRouteWaypoints(day).map(encodeURIComponent).join('/')}">
              View Route
           </a>
         </div>
@@ -334,10 +479,9 @@ function renderFamilies() {
         if (input.type === 'number') val = parseInt(val, 10) || 0;
         fam[key] = val;
         saveFamilies(families);
-        renderFamilies(); // re-render to refresh Navigate link + card title + expense dropdown
-        renderExpenses();
-        populateExpenseFamilyOptions();
+        renderFamilies(); // re-render to refresh Navigate link + card title
         renderReadiness();
+        renderCountdownCard();
       });
     });
     list.appendChild(card);
@@ -347,92 +491,6 @@ function renderFamilies() {
 function escapeAttr(str) {
   return String(str ?? '').replace(/"/g, '&quot;');
 }
-
-/* ---------------- Expenses ---------------- */
-
-function loadExpenses() {
-  const saved = localStorage.getItem(STORAGE_KEYS.expenses);
-  return saved ? JSON.parse(saved) : [];
-}
-
-function saveExpenses(expenses) {
-  localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(expenses));
-}
-
-function setupExpenseForm() {
-  populateExpenseCategoryOptions();
-  populateExpenseFamilyOptions();
-
-  document.getElementById('expenseForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const note = document.getElementById('expNote').value.trim();
-    const category = document.getElementById('expCategory').value;
-    const amount = parseFloat(document.getElementById('expAmount').value);
-    const family = document.getElementById('expFamily').value;
-    if (!note || !amount) return;
-
-    const expenses = loadExpenses();
-    expenses.push({ id: Date.now(), note, category, amount, family, date: new Date().toISOString() });
-    saveExpenses(expenses);
-    e.target.reset();
-    populateExpenseFamilyOptions();
-    renderExpenses();
-  });
-}
-
-function populateExpenseCategoryOptions() {
-  const sel = document.getElementById('expCategory');
-  sel.innerHTML = TRIP.expenseCategories.map(c => `<option value="${c}">${capitalize(c)}</option>`).join('');
-}
-
-function populateExpenseFamilyOptions() {
-  const sel = document.getElementById('expFamily');
-  const families = loadFamilies();
-  sel.innerHTML = families.map(f => `<option value="${escapeAttr(f.name)}">${f.name}</option>`).join('');
-}
-
-function renderExpenses() {
-  const expenses = loadExpenses();
-  const families = loadFamilies();
-  const listEl = document.getElementById('expenseList');
-
-  if (!expenses.length) {
-    listEl.innerHTML = `<div class="empty-state">
-      <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-      <div>No expenses logged yet.</div>
-    </div>`;
-  } else {
-    listEl.innerHTML = expenses.slice().reverse().map(exp => `
-      <div class="expense-item">
-        <div class="expense-item__meta">
-          <span class="expense-item__cat">${capitalize(exp.category)} · ${exp.family}</span>
-          <span class="expense-item__note">${escapeAttr(exp.note)}</span>
-        </div>
-        <span class="expense-item__amount">£${exp.amount.toFixed(2)}</span>
-      </div>
-    `).join('');
-  }
-
-  const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const perFamily = families.length ? total / families.length : 0;
-
-  const paidByFamily = {};
-  families.forEach(f => paidByFamily[f.name] = 0);
-  expenses.forEach(e => { paidByFamily[e.family] = (paidByFamily[e.family] || 0) + e.amount; });
-
-  const summaryLines = families.map(f => {
-    const paid = paidByFamily[f.name] || 0;
-    const balance = paid - perFamily;
-    const sign = balance >= 0 ? '+' : '';
-    return `${f.name.padEnd(12, ' ')} paid £${paid.toFixed(2).padStart(7,' ')}  →  ${sign}£${balance.toFixed(2)}`;
-  }).join('\n');
-
-  document.getElementById('expenseSummary').innerHTML =
-    `Total spent: £${total.toFixed(2)}\nEqual split (${families.length} families): £${perFamily.toFixed(2)} each\n\n${summaryLines}\n\n(+ owed back · − still owes group)`
-      .replace(/\n/g, '<br>');
-}
-
-function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 /* ---------------- Accommodation (More tab) ---------------- */
 
@@ -446,71 +504,204 @@ function renderAccommodation() {
   `).join('');
 }
 
-/* ---------------- Packing ---------------- */
+/* ---------------- Packing (shared master list, synced via Firebase) ---------------- */
 
-function loadPackingState() {
-  const saved = localStorage.getItem(STORAGE_KEYS.packing);
-  return saved ? JSON.parse(saved) : {};
+let packingCommon = {};
+let packingIndividual = {};
+let individualPackingRef = null;
+
+function getCombinedPackingItems() {
+  const hidden = JSON.parse(localStorage.getItem(STORAGE_KEYS.packHidden) || '{}');
+  const items = [];
+  Object.entries(packingCommon || {}).forEach(([id, v]) => { if (!hidden[id]) items.push({ id, ...v, source: 'common' }); });
+  Object.entries(packingIndividual || {}).forEach(([id, v]) => { if (!hidden[id]) items.push({ id, ...v, source: 'personal' }); });
+  return items;
 }
 
-function savePackingState(state) {
-  localStorage.setItem(STORAGE_KEYS.packing, JSON.stringify(state));
+function getPackingChecked() {
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.packChecked) || '{}');
 }
 
-function renderPacking() {
-  const state = loadPackingState();
+function initPackingSync() {
+  if (!fbDb) {
+    // Firebase not connected yet — seed a local-only view so the UI still works.
+    packingCommon = {};
+    Object.entries(TRIP.packingCategories).forEach(([cat, items]) => {
+      items.forEach(text => {
+        packingCommon['seed_' + cat + '_' + text.replace(/\W+/g, '_')] = { text, category: cat, addedBy: 'default' };
+      });
+    });
+    renderPackingList();
+    renderHomePackingTile();
+    return;
+  }
+
+  fbDb.ref('packing/seeded').once('value').then(snap => {
+    if (!snap.val()) {
+      const updates = {};
+      Object.entries(TRIP.packingCategories).forEach(([cat, items]) => {
+        items.forEach(text => {
+          const id = 'seed_' + cat + '_' + text.replace(/\W+/g, '_');
+          updates['packing/common/' + id] = { text, category: cat, addedBy: 'default', ts: Date.now() };
+        });
+      });
+      updates['packing/seeded'] = true;
+      fbDb.ref().update(updates);
+    }
+  }).catch(err => console.error('Packing seed check failed', err));
+
+  fbDb.ref('packing/common').on('value', snap => {
+    packingCommon = snap.val() || {};
+    renderPackingList();
+    renderHomePackingTile();
+  });
+
+  refreshIndividualPackingSubscription();
+}
+
+function refreshIndividualPackingSubscription() {
+  if (!fbDb) return;
+  if (individualPackingRef) individualPackingRef.off();
+  const id = getIdentity();
+  if (!id) { packingIndividual = {}; renderPackingList(); renderHomePackingTile(); return; }
+  individualPackingRef = fbDb.ref('packing/individual/' + id);
+  individualPackingRef.on('value', snap => {
+    packingIndividual = snap.val() || {};
+    renderPackingList();
+    renderHomePackingTile();
+  });
+}
+
+function populatePackingAssignOptions() {
+  const sel = document.getElementById('newPackItemAssign');
+  if (!sel) return;
+  const id = getIdentity();
+  const families = loadFamilies();
+  let opts = `<option value="common">Everyone</option>`;
+  if (id) opts += `<option value="${escapeAttr(id)}">Just me</option>`;
+  families.forEach(f => { if (f.name !== id) opts += `<option value="${escapeAttr(f.name)}">${f.name} only</option>`; });
+  sel.innerHTML = opts;
+}
+
+function addPackingItem() {
+  const input = document.getElementById('newPackItemText');
+  const text = input.value.trim();
+  if (!text) return;
+  const assign = document.getElementById('newPackItemAssign').value;
+  const id = 'custom_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  const entry = { text, category: 'custom', addedBy: getIdentity() || 'someone', ts: Date.now() };
+
+  if (!fbDb) {
+    packingCommon[id] = entry;
+    renderPackingList();
+    renderHomePackingTile();
+    input.value = '';
+    return;
+  }
+  const path = assign === 'common' ? `packing/common/${id}` : `packing/individual/${assign}/${id}`;
+  fbDb.ref(path).set(entry);
+  input.value = '';
+}
+
+function renderPackingList() {
   const container = document.getElementById('packList');
+  if (!container) return;
+  const items = getCombinedPackingItems();
+  const checked = getPackingChecked();
+
+  const groups = {};
+  items.forEach(it => {
+    const cat = it.category || 'custom';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(it);
+  });
+
+  const order = [...Object.keys(TRIP.packingCategories), 'custom'];
   container.innerHTML = '';
 
-  let total = 0, checked = 0;
-
-  Object.entries(TRIP.packingCategories).forEach(([cat, items]) => {
-    const group = document.createElement('div');
-    group.className = 'packing-group';
+  order.forEach(cat => {
+    if (!groups[cat] || !groups[cat].length) return;
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'packing-group';
     const title = document.createElement('div');
     title.className = 'packing-group__title';
-    title.textContent = cat.replace(/_/g, ' ');
-    group.appendChild(title);
+    title.textContent = cat === 'custom' ? 'Added items' : cat.replace(/_/g, ' ');
+    groupDiv.appendChild(title);
 
-    items.forEach(item => {
-      total++;
-      const itemKey = `${cat}::${item}`;
-      const isChecked = !!state[itemKey];
-      if (isChecked) checked++;
-
+    groups[cat].forEach(it => {
+      const isChecked = !!checked[it.id];
       const row = document.createElement('div');
       row.className = 'pack-item' + (isChecked ? ' checked' : '');
-      row.innerHTML = `<input type="checkbox" ${isChecked ? 'checked' : ''}><span class="pack-item__label">${item}</span>`;
+      row.innerHTML = `
+        <input type="checkbox" ${isChecked ? 'checked' : ''}>
+        <span class="pack-item__label">${escapeAttr(it.text)}</span>
+        ${it.source === 'personal' ? '<span class="pack-item__source">personal</span>' : ''}
+        <button class="pack-item__hide" title="Hide from my list">✕</button>
+      `;
       row.addEventListener('click', (e) => {
-        if (e.target.tagName !== 'INPUT') row.querySelector('input').click();
+        if (e.target.tagName !== 'INPUT' && !e.target.classList.contains('pack-item__hide')) row.querySelector('input').click();
       });
       row.querySelector('input').addEventListener('change', (e) => {
-        state[itemKey] = e.target.checked;
-        savePackingState(state);
+        const state = getPackingChecked();
+        state[it.id] = e.target.checked;
+        localStorage.setItem(STORAGE_KEYS.packChecked, JSON.stringify(state));
         row.classList.toggle('checked', e.target.checked);
-        updatePackingProgress();
+        updatePackingProgressUI();
         renderReadiness();
+        renderHomePackingTile();
       });
-      group.appendChild(row);
+      row.querySelector('.pack-item__hide').addEventListener('click', () => {
+        const hidden = JSON.parse(localStorage.getItem(STORAGE_KEYS.packHidden) || '{}');
+        hidden[it.id] = true;
+        localStorage.setItem(STORAGE_KEYS.packHidden, JSON.stringify(hidden));
+        renderPackingList();
+        renderReadiness();
+        renderHomePackingTile();
+      });
+      groupDiv.appendChild(row);
     });
 
-    container.appendChild(group);
+    container.appendChild(groupDiv);
   });
 
-  updatePackingProgress();
+  updatePackingProgressUI();
 }
 
-function updatePackingProgress() {
-  const state = loadPackingState();
-  let total = 0, checked = 0;
-  Object.entries(TRIP.packingCategories).forEach(([cat, items]) => {
-    items.forEach(item => {
-      total++;
-      if (state[`${cat}::${item}`]) checked++;
-    });
+function updatePackingProgressUI() {
+  const items = getCombinedPackingItems();
+  const checked = getPackingChecked();
+  const total = items.length;
+  const done = items.filter(it => checked[it.id]).length;
+  const labelEl = document.getElementById('packProgressLabel');
+  const fillEl = document.getElementById('packProgressFill');
+  if (labelEl) labelEl.textContent = `${done} of ${total} packed`;
+  if (fillEl) fillEl.style.width = total ? `${(done / total) * 100}%` : '0%';
+}
+
+function renderHomePackingTile() {
+  const items = getCombinedPackingItems();
+  const checked = getPackingChecked();
+  const total = items.length;
+  const done = items.filter(it => checked[it.id]).length;
+  const label = document.getElementById('packingTileLabel');
+  const fill = document.getElementById('packingTileFill');
+  if (label) label.textContent = total ? `${done} of ${total} packed` : 'No items yet';
+  if (fill) fill.style.width = total ? `${(done / total) * 100}%` : '0%';
+}
+
+function setupPackingModal() {
+  const tile = document.getElementById('packingTile');
+  const modal = document.getElementById('packingModal');
+  const closeBtn = document.getElementById('closePackingModal');
+  const addBtn = document.getElementById('addPackItemBtn');
+  if (tile && modal) tile.addEventListener('click', () => {
+    populatePackingAssignOptions();
+    renderPackingList();
+    modal.style.display = 'flex';
   });
-  document.getElementById('packProgressLabel').textContent = `${checked} of ${total} packed`;
-  document.getElementById('packProgressFill').style.width = total ? `${(checked/total)*100}%` : '0%';
+  if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+  if (addBtn) addBtn.addEventListener('click', addPackingItem);
 }
 
 /* ---------------- Notes ---------------- */
@@ -545,19 +736,15 @@ function renderReadiness() {
   const accomConfirmed = TRIP.accommodation.filter(a => a.confirmed).length;
   const accomTotal = TRIP.accommodation.length;
 
-  const packState = loadPackingState();
-  let packTotal = 0, packChecked = 0;
-  Object.entries(TRIP.packingCategories).forEach(([cat, items]) => {
-    items.forEach(item => {
-      packTotal++;
-      if (packState[`${cat}::${item}`]) packChecked++;
-    });
-  });
+  const packItems = getCombinedPackingItems();
+  const packChecked = getPackingChecked();
+  const packTotal = packItems.length;
+  const packDone = packItems.filter(it => packChecked[it.id]).length;
 
   const parts = [
     { label: 'Families', done: familiesDone, total: families.length },
     { label: 'Accommodation confirmed', done: accomConfirmed, total: accomTotal },
-    { label: 'Packing', done: packChecked, total: packTotal }
+    { label: 'Packing', done: packDone, total: packTotal }
   ];
 
   const overallDone = parts.reduce((s, p) => s + p.done, 0);
@@ -591,8 +778,8 @@ function describeWeatherCode(code) {
   return WMO[code] || ['Unknown', '🌡'];
 }
 
-function getWeatherLocation() {
-  // Prefer tonight's accommodation coords; fall back to Edinburgh as a sane Scotland default.
+async function getWeatherLocation() {
+  if (isPreTrip()) return await getHomeLocation();
   const stay = getTonightAccommodation();
   if (stay && stay.lat && stay.lng) return { lat: stay.lat, lng: stay.lng, label: stay.city };
   return { lat: 55.9533, lng: -3.1883, label: 'Edinburgh' };
@@ -614,7 +801,7 @@ function getNextStopLocation() {
 }
 
 async function fetchOpenMeteo(lat, lng) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=7`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset&timezone=auto&forecast_days=7`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Weather fetch failed');
   return await res.json();
@@ -652,6 +839,45 @@ function renderCurrentWeather(data, loc) {
       </div>
     `;
   }).join('');
+
+  renderSunriseTile(data);
+  renderMidgeTile(data);
+}
+
+function renderSunriseTile(data) {
+  const el = document.getElementById('sunriseValue');
+  if (!el) return;
+  try {
+    const sunrise = new Date(data.daily.sunrise[0]);
+    const sunset = new Date(data.daily.sunset[0]);
+    const goldenStart = new Date(sunset.getTime() - 60 * 60000);
+    const fmt = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    el.textContent = `${fmt(goldenStart)}–${fmt(sunset)}`;
+    el.title = `Sunrise ${fmt(sunrise)} · Sunset ${fmt(sunset)}`;
+  } catch (err) {
+    el.textContent = '--';
+  }
+}
+
+function renderMidgeTile(data) {
+  const el = document.getElementById('midgeValue');
+  if (!el) return;
+  try {
+    const temp = data.current.temperature_2m;
+    const wind = data.current.wind_speed_10m;
+    const humidity = data.current.relative_humidity_2m;
+    let score = 0;
+    if (temp >= 10 && temp <= 22) score++;
+    if (wind < 8) score++;
+    if (humidity > 70) score++;
+    let level = 'Low', color = '#7EAE8C';
+    if (score >= 3) { level = 'High'; color = '#C1543B'; }
+    else if (score === 2) { level = 'Medium'; color = '#D8A73B'; }
+    el.textContent = level;
+    el.style.color = color;
+  } catch (err) {
+    el.textContent = '--';
+  }
 }
 
 function renderNextWeather(data, loc) {
@@ -666,7 +892,7 @@ function renderNextWeather(data, loc) {
 }
 
 async function loadWeather() {
-  const loc = getWeatherLocation();
+  const loc = await getWeatherLocation();
   const nextLoc = getNextStopLocation();
 
   try {
@@ -704,7 +930,7 @@ async function loadWeather() {
 async function loadForecastScreen() {
   const card = document.getElementById('forecastCard');
   try {
-    const loc = getWeatherLocation();
+    const loc = await getWeatherLocation();
     const data = await fetchOpenMeteo(loc.lat, loc.lng);
     cacheWeather('sixDay', data, loc);
 
@@ -726,6 +952,15 @@ async function loadForecastScreen() {
       card.innerHTML = `<p class="muted">Could not load forecast — check your connection.</p>`;
     }
   }
+}
+
+function setupForecastModal() {
+  const btn = document.getElementById('openForecastBtn');
+  const modal = document.getElementById('forecastModal');
+  const closeBtn = document.getElementById('closeForecastModal');
+  if (btn && modal) btn.addEventListener('click', () => { modal.style.display = 'flex'; loadForecastScreen(); });
+  if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
 }
 
 function timeAgo(ts) {
@@ -765,10 +1000,17 @@ async function fetchRoute(lat1, lng1, lat2, lng2) {
 
 async function computeDayLegs(day) {
   const locs = TRIP.locations || {};
+  let homeLoc = null;
+  if (day.route.includes('Home')) {
+    homeLoc = await getHomeLocation();
+    if (homeLoc.label === 'Home') homeLoc = null; // fallback location only — treat as unknown
+  }
   const legs = [];
   for (let i = 0; i < day.route.length - 1; i++) {
     const a = day.route[i], b = day.route[i + 1];
-    legs.push(locs[a] && locs[b] ? { from: a, to: b, fromLoc: locs[a], toLoc: locs[b] } : { from: a, to: b, unknown: true });
+    const aLoc = a === 'Home' ? homeLoc : locs[a];
+    const bLoc = b === 'Home' ? homeLoc : locs[b];
+    legs.push(aLoc && bLoc ? { from: a, to: b, fromLoc: aLoc, toLoc: bLoc } : { from: a, to: b, unknown: true });
   }
   await Promise.all(legs.map(async (leg) => {
     if (leg.unknown) return;
@@ -872,6 +1114,10 @@ function showIdentityOverlay() {
       overlay.style.display = 'none';
       renderSettingsIdentity();
       updateLocationStatusUI();
+      refreshIndividualPackingSubscription();
+      renderCountdownCard();
+      initTravelPathMap();
+      renderReadiness();
     });
     opts.appendChild(btn);
   });

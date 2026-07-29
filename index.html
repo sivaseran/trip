@@ -51,12 +51,17 @@
       <div id="readinessDetails" style="margin-top:10px;"></div>
     </div>
 
-    <div class="card">
-      <div class="card__title">
+    <div class="card countdown-card">
+      <div id="countdownCard"><div class="muted">Loading…</div></div>
+    </div>
+
+    <div class="card" style="padding:8px;">
+      <div class="card__title" style="padding:8px 8px 0;">
         <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
         TRAVEL PATH
       </div>
-      <div class="road" id="travelPathRoad"></div>
+      <div id="travelPathMap" class="travel-path-map"></div>
+      <div class="muted" style="padding:8px; font-size:0.68rem;">Tap to open the full live Map</div>
     </div>
 
     <div class="card">
@@ -110,17 +115,72 @@
       </div>
       <div id="weatherStrip" style="display:flex; gap:6px; margin-top:12px;"></div>
       <div class="muted" id="weatherStaleness" style="margin-top:8px; font-size:0.68rem;"></div>
+      <button class="btn btn--ghost btn--small" id="openForecastBtn" style="margin-top:12px; width:100%;">See 6-day forecast</button>
+    </div>
+
+    <div class="tile-row">
+      <div class="tile" id="sunriseTile">
+        <div class="tile__icon">🌅</div>
+        <div class="tile__label">Golden Hour</div>
+        <div class="tile__value" id="sunriseValue">--</div>
+      </div>
+      <div class="tile" id="midgeTile">
+        <div class="tile__icon">🦟</div>
+        <div class="tile__label">Midge Risk</div>
+        <div class="tile__value" id="midgeValue">--</div>
+      </div>
+    </div>
+
+    <div class="card packing-tile" id="packingTile">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>
+        PACKING
+      </div>
+      <div class="muted" id="packingTileLabel">Loading…</div>
+      <div class="progress-bar"><div class="progress-bar__fill" id="packingTileFill" style="width:0%;"></div></div>
+      <div class="muted" style="margin-top:8px; font-size:0.7rem;">Tap to open your checklist</div>
     </div>
 
     <div class="card">
       <div class="card__title">
         <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
-        TONIGHT'S ACCOMMODATION
+        <span id="homeAccomLabel">TONIGHT'S ACCOMMODATION</span>
       </div>
       <div id="homeAccom"></div>
     </div>
 
   </section>
+
+  <!-- ============ PACKING MODAL ============ -->
+  <div id="packingModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-card__head">
+        <h3 style="margin:0;">Packing Checklist</h3>
+        <button class="modal-close" id="closePackingModal">✕</button>
+      </div>
+      <div class="muted" id="packProgressLabel">0 of 0 packed</div>
+      <div class="progress-bar"><div class="progress-bar__fill" id="packProgressFill" style="width:0%;"></div></div>
+
+      <div class="add-item-row">
+        <input type="text" id="newPackItemText" placeholder="Add an item…">
+        <select id="newPackItemAssign"></select>
+        <button class="btn btn--small" id="addPackItemBtn">Add</button>
+      </div>
+
+      <div id="packList" style="margin-top:14px;"></div>
+    </div>
+  </div>
+
+  <!-- ============ FORECAST MODAL ============ -->
+  <div id="forecastModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-card__head">
+        <h3 style="margin:0;">6-Day Forecast</h3>
+        <button class="modal-close" id="closeForecastModal">✕</button>
+      </div>
+      <div id="forecastCard"><p class="muted">Loading forecast…</p></div>
+    </div>
+  </div>
 
   <!-- ============ ITINERARY ============ -->
   <section class="screen" id="screen-itinerary">
@@ -155,30 +215,16 @@
     </div>
   </section>
 
-  <!-- ============ FAMILIES ============ -->
-  <section class="screen" id="screen-families">
-    <h2 class="section-title">Families</h2>
-    <div id="familyList"></div>
-  </section>
-
   <!-- ============ MORE ============ -->
   <section class="screen" id="screen-more">
     <h2 class="section-title">More</h2>
     <div class="menu-list">
+      <div class="menu-item" data-open="screen-families">
+        <div class="menu-item__left"><svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="8" r="2.5"/><path d="M2 21v-2a5 5 0 015-5h4a5 5 0 015 5v2M17 13.5a4 4 0 013 3.9V21"/></svg>Families</div>
+        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
       <div class="menu-item" data-open="screen-accommodation">
         <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>Accommodation</div>
-        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
-      </div>
-      <div class="menu-item" data-open="screen-packing">
-        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>Packing</div>
-        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
-      </div>
-      <div class="menu-item" data-open="screen-weathermore">
-        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h10a4 4 0 004-4M7 15V9a5 5 0 0110 0v6"/></svg>Weather Forecast</div>
-        <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
-      </div>
-      <div class="menu-item" data-open="screen-expenses">
-        <div class="menu-item__left"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Expenses <span class="muted" style="font-size:0.65rem; margin-left:4px;">(paused)</span></div>
         <svg class="menu-item__chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
       </div>
       <div class="menu-item" data-open="screen-emergency">
@@ -198,72 +244,14 @@
     <!-- Sub-screens reached from More -->
     <div style="margin-top:20px;">
 
+      <div id="screen-families" class="sub-screen" style="display:none;">
+        <h3 style="margin:0 0 10px;">Families</h3>
+        <div id="familyList"></div>
+      </div>
+
       <div id="screen-accommodation" class="sub-screen" style="display:none;">
         <h3 style="margin:0 0 10px;">Accommodation</h3>
         <div id="accomList"></div>
-      </div>
-
-      <div id="screen-packing" class="sub-screen" style="display:none;">
-        <h3 style="margin:0 0 4px;">Packing Checklist</h3>
-        <div class="muted" id="packProgressLabel">0 of 0 packed</div>
-        <div class="progress-bar"><div class="progress-bar__fill" id="packProgressFill" style="width:0%;"></div></div>
-        <div id="packList" style="margin-top:14px;"></div>
-      </div>
-
-      <div id="screen-weathermore" class="sub-screen" style="display:none;">
-        <h3 style="margin:0 0 10px;">Weather Forecast</h3>
-        <div class="card" id="forecastCard">
-          <p class="muted">Loading forecast…</p>
-        </div>
-      </div>
-
-      <div id="screen-expenses" class="sub-screen" style="display:none;">
-        <h3 style="margin:0 0 4px;">Expenses</h3>
-        <p class="muted" style="margin:0 0 14px;">Set aside for now — pick this back up when you're ready to start tracking spend.</p>
-
-        <div class="card">
-          <div class="card__title">
-            <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-            GROUP TOTAL & SPLIT
-          </div>
-          <div class="split-summary" id="expenseSummary"></div>
-        </div>
-
-        <div class="card">
-          <div class="card__title">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-            ADD EXPENSE
-          </div>
-          <form class="expense-form" id="expenseForm">
-            <div class="field field--full">
-              <label>What for</label>
-              <input type="text" id="expNote" placeholder="e.g. Petrol at Southwaite" required>
-            </div>
-            <div class="field">
-              <label>Category</label>
-              <select id="expCategory"></select>
-            </div>
-            <div class="field">
-              <label>Amount (£)</label>
-              <input type="number" id="expAmount" min="0" step="0.01" required>
-            </div>
-            <div class="field field--full">
-              <label>Paid by</label>
-              <select id="expFamily"></select>
-            </div>
-            <div class="field field--full">
-              <button class="btn" type="submit" style="width:100%;">Add Expense</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="card">
-          <div class="card__title">
-            <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            LOG
-          </div>
-          <div id="expenseList"></div>
-        </div>
       </div>
 
       <div id="screen-emergency" class="sub-screen" style="display:none;">
@@ -298,7 +286,7 @@
             <input type="text" id="settingsBreakdown" placeholder="e.g. 0800 XXX XXXX">
           </div>
           <button class="btn" id="saveSettingsBtn">Save</button>
-          <p class="muted" style="margin-top:14px;">Packing, notes and expenses are stored on this device only. Location is the one thing shared live between families — see the Map tab.</p>
+          <p class="muted" style="margin-top:14px;">Notes are stored on this device only. Packing and location sync live between families.</p>
         </div>
       </div>
 
@@ -316,9 +304,6 @@
   </button>
   <button class="nav-btn" data-screen="screen-map">
     <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-11a7 7 0 0114 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Map
-  </button>
-  <button class="nav-btn" data-screen="screen-families">
-    <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="8" r="2.5"/><path d="M2 21v-2a5 5 0 015-5h4a5 5 0 015 5v2M17 13.5a4 4 0 013 3.9V21"/></svg>Families
   </button>
   <button class="nav-btn" data-screen="screen-more">
     <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>More
