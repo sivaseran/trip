@@ -51,6 +51,18 @@
       <div id="readinessDetails" style="margin-top:10px;"></div>
     </div>
 
+    <div class="card packing-tile" id="packingTile">
+      <div class="card__title">
+        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>
+        PACKING
+      </div>
+      <div id="packingTileBody">
+        <div class="muted" id="packingTileLabel">Loading…</div>
+        <div class="progress-bar"><div class="progress-bar__fill" id="packingTileFill" style="width:0%;"></div></div>
+        <div class="muted" style="margin-top:8px; font-size:0.7rem;">Tap to open your checklist</div>
+      </div>
+    </div>
+
     <div class="card countdown-card">
       <div id="countdownCard"><div class="muted">Loading…</div></div>
     </div>
@@ -121,24 +133,16 @@
     <div class="tile-row">
       <div class="tile" id="sunriseTile">
         <div class="tile__icon">🌅</div>
-        <div class="tile__label">Golden Hour</div>
+        <div class="tile__label" id="sunriseTileLabel">Golden Hour</div>
         <div class="tile__value" id="sunriseValue">--</div>
+        <div class="tile__caption" id="sunriseCaption">Loading…</div>
       </div>
       <div class="tile" id="midgeTile">
         <div class="tile__icon">🦟</div>
-        <div class="tile__label">Midge Risk</div>
+        <div class="tile__label" id="midgeTileLabel">Midge Risk</div>
         <div class="tile__value" id="midgeValue">--</div>
+        <div class="tile__caption">Still, mild & humid air = worse</div>
       </div>
-    </div>
-
-    <div class="card packing-tile" id="packingTile">
-      <div class="card__title">
-        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>
-        PACKING
-      </div>
-      <div class="muted" id="packingTileLabel">Loading…</div>
-      <div class="progress-bar"><div class="progress-bar__fill" id="packingTileFill" style="width:0%;"></div></div>
-      <div class="muted" style="margin-top:8px; font-size:0.7rem;">Tap to open your checklist</div>
     </div>
 
     <div class="card">

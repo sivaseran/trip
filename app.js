@@ -310,16 +310,17 @@ function renderCountdownCard() {
   `;
 }
 
-/* ---------------- Travel path mini-map (Home tile) ---------------- */
+/* ---------------- Travel path mini-map (Home tile) — live positions for all 5 families ---------------- */
 
 let travelPathMap = null;
+let travelPathMarkers = {};
 
 async function initTravelPathMap() {
   if (typeof L === 'undefined') return;
   const container = document.getElementById('travelPathMap');
   if (!container) return;
 
-  if (travelPathMap) { travelPathMap.remove(); travelPathMap = null; }
+  if (travelPathMap) { travelPathMap.remove(); travelPathMap = null; travelPathMarkers = {}; }
   travelPathMap = L.map('travelPathMap', {
     zoomControl: false, attributionControl: false,
     dragging: false, scrollWheelZoom: false, doubleClickZoom: false, tap: false
@@ -333,7 +334,7 @@ async function initTravelPathMap() {
     .map(l => [l.lat, l.lng]);
 
   if (routeCoords.length) {
-    L.polyline(routeCoords, { color: '#D8A73B', weight: 3, dashArray: '6,6' }).addTo(travelPathMap);
+    L.polyline(routeCoords, { color: '#D8A73B', weight: 2, dashArray: '6,6', opacity: 0.5 }).addTo(travelPathMap);
     travelPathMap.fitBounds(routeCoords, { padding: [16, 16] });
   }
 
@@ -342,19 +343,38 @@ async function initTravelPathMap() {
     if (btn) btn.click();
   };
 
-  // Current position marker — home (pre-trip, geocoded if possible) or current travel-path stop
-  let currentLoc = null;
-  if (isPreTrip()) {
-    currentLoc = await getHomeLocation();
-  } else {
-    const idx = getCurrentPathIndex();
-    const label = TRIP.travelPath[idx] && TRIP.travelPath[idx].label;
-    currentLoc = label && TRIP.locations[label];
+  if (typeof LIVE_LOCATION_ENABLED !== 'undefined' && LIVE_LOCATION_ENABLED && fbDb) {
+    fbDb.ref('locations').on('value', (snap) => {
+      updateTravelPathMarkers(snap.val() || {});
+    });
   }
-  if (currentLoc && typeof currentLoc.lat === 'number' && travelPathMap) {
-    L.circleMarker([currentLoc.lat, currentLoc.lng], {
-      radius: 8, color: '#D8A73B', fillColor: '#D8A73B', fillOpacity: 0.9, weight: 2
-    }).addTo(travelPathMap);
+}
+
+function updateTravelPathMarkers(data) {
+  if (!travelPathMap) return;
+  const colors = ['#D8A73B', '#8D6FA3', '#7EAE8C', '#C1543B', '#5B8FA8'];
+  const families = loadFamilies();
+  const bounds = [];
+
+  families.forEach((f, i) => {
+    const loc = data[f.name];
+    if (!loc || typeof loc.lat !== 'number') {
+      if (travelPathMarkers[f.name]) { travelPathMap.removeLayer(travelPathMarkers[f.name]); delete travelPathMarkers[f.name]; }
+      return;
+    }
+    bounds.push([loc.lat, loc.lng]);
+    if (travelPathMarkers[f.name]) {
+      travelPathMarkers[f.name].setLatLng([loc.lat, loc.lng]);
+    } else {
+      travelPathMarkers[f.name] = L.circleMarker([loc.lat, loc.lng], {
+        radius: 7, color: colors[i % colors.length], fillColor: colors[i % colors.length], fillOpacity: 0.9, weight: 2
+      }).addTo(travelPathMap);
+    }
+    travelPathMarkers[f.name].bindTooltip(f.name, { permanent: false });
+  });
+
+  if (bounds.length) {
+    travelPathMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 9 });
   }
 }
 
@@ -533,6 +553,7 @@ function initPackingSync() {
     });
     renderPackingList();
     renderHomePackingTile();
+    renderReadiness();
     return;
   }
 
@@ -554,6 +575,7 @@ function initPackingSync() {
     packingCommon = snap.val() || {};
     renderPackingList();
     renderHomePackingTile();
+    renderReadiness();
   });
 
   refreshIndividualPackingSubscription();
@@ -563,12 +585,13 @@ function refreshIndividualPackingSubscription() {
   if (!fbDb) return;
   if (individualPackingRef) individualPackingRef.off();
   const id = getIdentity();
-  if (!id) { packingIndividual = {}; renderPackingList(); renderHomePackingTile(); return; }
+  if (!id) { packingIndividual = {}; renderPackingList(); renderHomePackingTile(); renderReadiness(); return; }
   individualPackingRef = fbDb.ref('packing/individual/' + id);
   individualPackingRef.on('value', snap => {
     packingIndividual = snap.val() || {};
     renderPackingList();
     renderHomePackingTile();
+    renderReadiness();
   });
 }
 
@@ -683,10 +706,18 @@ function renderHomePackingTile() {
   const checked = getPackingChecked();
   const total = items.length;
   const done = items.filter(it => checked[it.id]).length;
-  const label = document.getElementById('packingTileLabel');
-  const fill = document.getElementById('packingTileFill');
-  if (label) label.textContent = total ? `${done} of ${total} packed` : 'No items yet';
-  if (fill) fill.style.width = total ? `${(done / total) * 100}%` : '0%';
+  const body = document.getElementById('packingTileBody');
+  if (!body) return;
+
+  if (total > 0 && done === total) {
+    body.innerHTML = `<div class="muted" style="color:#7EAE8C;">✓ All packed — tap to update</div>`;
+  } else {
+    body.innerHTML = `
+      <div class="muted" id="packingTileLabel">${total ? `${done} of ${total} packed` : 'No items yet'}</div>
+      <div class="progress-bar"><div class="progress-bar__fill" id="packingTileFill" style="width:${total ? (done/total)*100 : 0}%;"></div></div>
+      <div class="muted" style="margin-top:8px; font-size:0.7rem;">Tap to open your checklist</div>
+    `;
+  }
 }
 
 function setupPackingModal() {
@@ -840,22 +871,26 @@ function renderCurrentWeather(data, loc) {
     `;
   }).join('');
 
-  renderSunriseTile(data);
+  renderSunriseTile(data, loc);
   renderMidgeTile(data);
 }
 
-function renderSunriseTile(data) {
+function renderSunriseTile(data, loc) {
   const el = document.getElementById('sunriseValue');
+  const labelEl = document.getElementById('sunriseTileLabel');
+  const captionEl = document.getElementById('sunriseCaption');
   if (!el) return;
   try {
     const sunrise = new Date(data.daily.sunrise[0]);
     const sunset = new Date(data.daily.sunset[0]);
     const goldenStart = new Date(sunset.getTime() - 60 * 60000);
     const fmt = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (labelEl) labelEl.textContent = `Today · ${loc.label}`;
     el.textContent = `${fmt(goldenStart)}–${fmt(sunset)}`;
-    el.title = `Sunrise ${fmt(sunrise)} · Sunset ${fmt(sunset)}`;
+    if (captionEl) captionEl.textContent = `Sunrise ${fmt(sunrise)} · Sunset ${fmt(sunset)}`;
   } catch (err) {
     el.textContent = '--';
+    if (captionEl) captionEl.textContent = 'Unavailable';
   }
 }
 

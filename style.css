@@ -746,6 +746,7 @@ main {
 .tile__icon { font-size: 1.4rem; }
 .tile__label { font-size: 0.64rem; color: var(--mist); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
 .tile__value { font-family: var(--font-mono); font-size: 0.92rem; color: var(--gold); margin-top: 4px; }
+.tile__caption { font-size: 0.62rem; color: var(--stone); margin-top: 4px; line-height: 1.3; }
 
 /* ---------------- Packing tile on Home ---------------- */
 
