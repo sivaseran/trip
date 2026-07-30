@@ -842,3 +842,74 @@ main {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------------- Itinerary/Accommodation editors ---------------- */
+
+.waypoint-row, .attraction-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.waypoint-row select {
+  flex: 1;
+  background: var(--glen);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--parchment);
+  font-size: 0.82rem;
+}
+.attraction-edit-row__label {
+  flex: 1;
+  font-size: 0.85rem;
+}
+.waypoint-row__remove, .attraction-edit-row__remove {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.search-results {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.search-result-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--glen);
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  color: var(--stone);
+  cursor: pointer;
+}
+.search-result-item:hover, .search-result-item:active {
+  border: 1px solid var(--gold);
+}
+
+.day-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--glen);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.day-checkbox input { accent-color: var(--gold); }
+
+.edit-day-btn {
+  background: none;
+  border: 1px solid rgba(216,167,59,0.4);
+  color: var(--gold);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}

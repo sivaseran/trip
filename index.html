@@ -177,10 +177,102 @@
     </div>
   </div>
 
+  <!-- ============ DAY EDITOR MODAL ============ -->
+  <div id="dayEditModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-card__head">
+        <h3 style="margin:0;" id="dayEditTitle">Edit Day</h3>
+        <button class="modal-close" id="closeDayEditModal">✕</button>
+      </div>
+
+      <div class="field" style="margin-bottom:10px;">
+        <label>Day title</label>
+        <input type="text" id="editDayTitle" placeholder="e.g. Isle of Skye Day Trip">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Departure time</label>
+        <input type="time" id="editDayDeparture">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Overnight in</label>
+        <select id="editDayOvernight"></select>
+      </div>
+
+      <div class="packing-group__title" style="margin-top:16px;">Route (in order)</div>
+      <div id="editRouteList"></div>
+      <div class="action-row">
+        <button class="btn btn--ghost btn--small" id="addWaypointBtn">+ Add waypoint</button>
+      </div>
+
+      <div class="packing-group__title" style="margin-top:16px;">Attractions</div>
+      <div id="editAttractionList"></div>
+      <div class="add-item-row">
+        <input type="text" id="attractionSearchInput" placeholder="Search a place…">
+        <button class="btn btn--small" id="attractionSearchBtn">Search</button>
+      </div>
+      <div id="attractionSearchResults"></div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn" id="saveDayBtn" style="flex:1;">Save</button>
+        <button class="btn btn--ghost" id="deleteDayBtn" style="color:var(--danger); border-color:var(--danger);">Delete Day</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ STAY EDITOR MODAL ============ -->
+  <div id="stayEditModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-card__head">
+        <h3 style="margin:0;" id="stayEditTitle">Edit Stay</h3>
+        <button class="modal-close" id="closeStayEditModal">✕</button>
+      </div>
+
+      <div class="field" style="margin-bottom:10px;">
+        <label>City / Area</label>
+        <input type="text" id="editStayCity" placeholder="e.g. Glencoe">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Address</label>
+        <input type="text" id="editStayAddress" placeholder="Full address">
+      </div>
+      <div class="add-item-row">
+        <input type="text" id="staySearchInput" placeholder="Search to set map location…">
+        <button class="btn btn--small" id="staySearchBtn">Search</button>
+      </div>
+      <div id="staySearchResults"></div>
+      <div class="muted" id="stayCoordsPreview" style="font-size:0.68rem; margin-top:6px;"></div>
+
+      <div class="field" style="margin:10px 0;">
+        <label>Host</label>
+        <input type="text" id="editStayHost" placeholder="Optional">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Contact</label>
+        <input type="text" id="editStayContact" placeholder="Optional">
+      </div>
+      <div class="family-field-grid" style="margin-bottom:10px;">
+        <div class="field"><label>Check-in</label><input type="time" id="editStayCheckIn"></div>
+        <div class="field"><label>Check-out</label><input type="time" id="editStayCheckOut"></div>
+      </div>
+      <div class="packing-group__title" style="margin-top:10px;">Covers which days?</div>
+      <div id="editStayDays" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
+      <div class="pack-item" style="margin-top:10px;">
+        <input type="checkbox" id="editStayConfirmed">
+        <span class="pack-item__label">Confirmed</span>
+      </div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn" id="saveStayBtn" style="flex:1;">Save</button>
+        <button class="btn btn--ghost" id="deleteStayBtn" style="color:var(--danger); border-color:var(--danger);">Delete Stay</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ ITINERARY ============ -->
   <section class="screen" id="screen-itinerary">
     <h2 class="section-title">Itinerary</h2>
     <div id="dayList"></div>
+    <button class="btn btn--ghost" id="addDayBtn" style="width:100%; margin-top:6px;">+ Add Day</button>
   </section>
 
   <!-- ============ MAP / LIVE LOCATION ============ -->
@@ -247,6 +339,7 @@
       <div id="screen-accommodation" class="sub-screen" style="display:none;">
         <h3 style="margin:0 0 10px;">Accommodation</h3>
         <div id="accomList"></div>
+        <button class="btn btn--ghost" id="addStayBtn" style="width:100%; margin-top:6px;">+ Add Stay</button>
       </div>
 
       <div id="screen-emergency" class="sub-screen" style="display:none;">

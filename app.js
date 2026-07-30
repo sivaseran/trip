@@ -35,6 +35,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupMoreMenu();
   setupIdentity();
   initFirebase();
+  initTripContentSync();
+  setupItineraryEditors();
   setupSharingToggle();
   updateLocationStatusUI();
   renderHeaderSubtitle();
@@ -73,8 +75,9 @@ async function loadTripData() {
 function closeAllModals() {
   const pm = document.getElementById('packingModal');
   const fm = document.getElementById('forecastModal');
-  if (pm && pm.style.display !== 'none') pm.style.display = 'none';
-  if (fm && fm.style.display !== 'none') fm.style.display = 'none';
+  const dm = document.getElementById('dayEditModal');
+  const sm = document.getElementById('stayEditModal');
+  [pm, fm, dm, sm].forEach(m => { if (m && m.style.display !== 'none') m.style.display = 'none'; });
 }
 
 function setupNav() {
@@ -133,8 +136,8 @@ function tickCountdown() {
     else if (diffDays === 1) chip.textContent = '1 more day';
     else chip.textContent = `${diffDays} more days`;
   } else if (now >= start && now <= end) {
-    const dayNum = Math.min(TRIP.project.duration_days, Math.floor((now - start) / (1000*60*60*24)) + 1);
-    if (dayNum === TRIP.project.duration_days) {
+    const dayNum = Math.min(getTripDurationDays(), Math.floor((now - start) / (1000*60*60*24)) + 1);
+    if (dayNum === getTripDurationDays()) {
       chip.textContent = 'Final day';
     } else {
       const suffixes = ['th', 'st', 'nd', 'rd'];
@@ -349,8 +352,8 @@ function renderCountdownCard() {
       card.innerHTML = `<div class="countdown-big" style="font-size:1.1rem;">Trip complete 🏴</div><div class="muted">Hope it was unforgettable.</div>`;
     } else {
       const start = new Date(TRIP.project.start_date + 'T00:00:00');
-      const dayNum = Math.min(TRIP.project.duration_days, Math.floor((now - start) / (1000*60*60*24)) + 1);
-      card.innerHTML = `<div class="countdown-big" style="font-size:1.3rem;">DAY ${dayNum} OF ${TRIP.project.duration_days}</div><div class="muted">Trip's underway — check Itinerary for today's plan.</div>`;
+      const dayNum = Math.min(getTripDurationDays(), Math.floor((now - start) / (1000*60*60*24)) + 1);
+      card.innerHTML = `<div class="countdown-big" style="font-size:1.3rem;">DAY ${dayNum} OF ${getTripDurationDays()}</div><div class="muted">Trip's underway — check Itinerary for today's plan.</div>`;
     }
     return;
   }
@@ -499,9 +502,15 @@ function renderItinerary() {
              href="https://www.google.com/maps/dir/${buildRouteWaypoints(day).map(encodeURIComponent).join('/')}">
              View Route
           </a>
+          <button class="edit-day-btn" data-edit-day="${day.day}">Edit Day</button>
         </div>
       </div>
     `;
+
+    el.querySelector(`[data-edit-day="${day.day}"]`).addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDayEditor(day.day);
+    });
 
     let legsLoaded = false;
     el.querySelector('.day__head').addEventListener('click', async () => {
@@ -590,12 +599,18 @@ function escapeAttr(str) {
 
 function renderAccommodation() {
   const list = document.getElementById('accomList');
-  list.innerHTML = TRIP.accommodation.map(stay => `
+  list.innerHTML = TRIP.accommodation.map((stay, i) => `
     <div class="card">
       <div class="accom-card__badge">DAY ${stay.day.join(' & ')}</div>
       ${accomCardHTML(stay)}
+      <div class="action-row" style="margin-top:8px;">
+        <button class="edit-day-btn" data-edit-stay="${i}">Edit Stay</button>
+      </div>
     </div>
   `).join('');
+  list.querySelectorAll('[data-edit-stay]').forEach(btn => {
+    btn.addEventListener('click', () => openStayEditor(parseInt(btn.dataset.editStay, 10)));
+  });
 }
 
 /* ---------------- Packing (shared master list, synced via Firebase) ---------------- */
@@ -1424,4 +1439,396 @@ function renderFamilyLocationList(data) {
       <span class="family-location-row__meta">${loc ? timeAgo(loc.ts) : 'No data yet'}</span>
     </div>`;
   }).join('');
+}
+
+/* =========================================================
+   LIVE-EDITABLE ITINERARY & ACCOMMODATION (Firebase)
+   Anyone can edit; changes sync to all 5 families within
+   seconds. Static reference data (locations lookup, packing
+   categories, break settings) stays in the seed file — only
+   itinerary/accommodation content becomes live-editable.
+   ========================================================= */
+
+function getTripDurationDays() {
+  return TRIP.itinerary.length;
+}
+
+function sanitizeLocationKey(name) {
+  return String(name).replace(/[.#$\[\]/]/g, '_');
+}
+
+function normalizeItineraryFromFirebase(obj) {
+  if (!obj) return null;
+  return Object.values(obj).sort((a, b) => a.day - b.day);
+}
+
+function normalizeAccommodationFromFirebase(obj) {
+  if (!obj) return null;
+  return Object.entries(obj)
+    .map(([key, val]) => ({ ...val, _fbKey: key }))
+    .sort((a, b) => Math.min(...a.day) - Math.min(...b.day));
+}
+
+function invalidateComputedCaches() {
+  localStorage.removeItem('sfrt_total_miles_cache');
+  localStorage.removeItem(STORAGE_KEYS.weatherCache);
+}
+
+function rerenderAfterTripDataChange() {
+  invalidateComputedCaches();
+  renderHome();
+  renderReadiness();
+  renderItinerary();
+  renderAccommodation();
+  loadWeather();
+  renderCurrentLegCard();
+  initTravelPathMap();
+  renderHeaderSubtitle();
+}
+
+function initTripContentSync() {
+  if (!fbDb) return;
+
+  fbDb.ref('trip/seeded').once('value').then(snap => {
+    if (!snap.val()) {
+      const updates = {};
+      TRIP.itinerary.forEach(day => { updates['trip/itinerary/day' + day.day] = day; });
+      TRIP.accommodation.forEach((stay, i) => { updates['trip/accommodation/stay' + i] = stay; });
+      Object.entries(TRIP.locations).forEach(([name, loc]) => {
+        updates['trip/locations/' + sanitizeLocationKey(name)] = { name, lat: loc.lat, lng: loc.lng };
+      });
+      updates['trip/seeded'] = true;
+      fbDb.ref().update(updates);
+    }
+  }).catch(err => console.error('Trip content seed check failed', err));
+
+  fbDb.ref('trip/itinerary').on('value', snap => {
+    const data = normalizeItineraryFromFirebase(snap.val());
+    if (data && data.length) { TRIP.itinerary = data; rerenderAfterTripDataChange(); }
+  });
+
+  fbDb.ref('trip/accommodation').on('value', snap => {
+    const data = normalizeAccommodationFromFirebase(snap.val());
+    if (data && data.length) { TRIP.accommodation = data; rerenderAfterTripDataChange(); }
+  });
+
+  fbDb.ref('trip/locations').on('value', snap => {
+    const data = snap.val();
+    if (data) {
+      const locs = {};
+      Object.values(data).forEach(entry => { if (entry && entry.name) locs[entry.name] = { lat: entry.lat, lng: entry.lng }; });
+      TRIP.locations = locs;
+      rerenderAfterTripDataChange();
+    }
+  });
+}
+
+/* ---------------- Place search (OpenStreetMap Nominatim, no API key) ---------------- */
+
+async function searchNominatim(query) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=gb`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('search failed');
+    return await res.json();
+  } catch (err) {
+    console.error('Place search failed', err);
+    return [];
+  }
+}
+
+/* ---------------- Day editor ---------------- */
+
+let editingDayNumber = null;
+let editDayDraft = null;
+
+function openDayEditor(dayNumber) {
+  const day = dayNumber !== null ? TRIP.itinerary.find(d => d.day === dayNumber) : null;
+  editingDayNumber = dayNumber;
+  editDayDraft = day ? JSON.parse(JSON.stringify(day)) : {
+    day: TRIP.itinerary.length ? Math.max(...TRIP.itinerary.map(d => d.day)) + 1 : 1,
+    date: null,
+    title: '',
+    route: [],
+    attractions: [],
+    meals: { breakfast: '', lunch: '', dinner: '' },
+    departureTime: '08:00',
+    overnight: null
+  };
+
+  document.getElementById('dayEditTitle').textContent = day ? `Edit Day ${dayNumber}` : `New Day ${editDayDraft.day}`;
+  document.getElementById('editDayTitle').value = editDayDraft.title || '';
+  document.getElementById('editDayDeparture').value = editDayDraft.departureTime || '08:00';
+
+  populateOvernightSelect();
+  renderEditRouteList();
+  renderEditAttractionList();
+
+  document.getElementById('deleteDayBtn').style.display = day ? 'inline-flex' : 'none';
+  document.getElementById('attractionSearchResults').innerHTML = '';
+  document.getElementById('attractionSearchInput').value = '';
+
+  closeAllModals();
+  document.getElementById('dayEditModal').style.display = 'flex';
+  suspendTravelPathMap();
+}
+
+function closeDayEditor() {
+  document.getElementById('dayEditModal').style.display = 'none';
+  editingDayNumber = null;
+  editDayDraft = null;
+  resumeTravelPathMap();
+}
+
+function populateOvernightSelect() {
+  const sel = document.getElementById('editDayOvernight');
+  const names = Object.keys(TRIP.locations).sort();
+  sel.innerHTML = `<option value="">None (travel day)</option>` + names.map(n => `<option value="${escapeAttr(n)}">${n}</option>`).join('');
+  sel.value = editDayDraft.overnight || '';
+}
+
+function renderEditRouteList() {
+  const container = document.getElementById('editRouteList');
+  const names = Object.keys(TRIP.locations).sort();
+  container.innerHTML = editDayDraft.route.map((point, i) => `
+    <div class="waypoint-row">
+      <select data-idx="${i}">
+        <option value="Home" ${point === 'Home' ? 'selected' : ''}>Home (each family's own)</option>
+        ${names.map(n => `<option value="${escapeAttr(n)}" ${point === n ? 'selected' : ''}>${n}</option>`).join('')}
+      </select>
+      <button class="waypoint-row__remove" data-remove-idx="${i}">✕</button>
+    </div>
+  `).join('') || '<div class="muted" style="font-size:0.75rem;">No stops yet — add one below.</div>';
+
+  container.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      editDayDraft.route[parseInt(e.target.dataset.idx, 10)] = e.target.value;
+    });
+  });
+  container.querySelectorAll('[data-remove-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editDayDraft.route.splice(parseInt(btn.dataset.removeIdx, 10), 1);
+      renderEditRouteList();
+    });
+  });
+}
+
+function addWaypointRow() {
+  const names = Object.keys(TRIP.locations).sort();
+  editDayDraft.route.push(names[0] || 'Home');
+  renderEditRouteList();
+}
+
+function renderEditAttractionList() {
+  const container = document.getElementById('editAttractionList');
+  container.innerHTML = editDayDraft.attractions.map((a, i) => `
+    <div class="attraction-edit-row">
+      <span class="attraction-edit-row__label">${escapeAttr(a.name)}</span>
+      <button class="attraction-edit-row__remove" data-remove-attraction="${i}">✕</button>
+    </div>
+  `).join('') || '<div class="muted" style="font-size:0.75rem;">No attractions yet.</div>';
+
+  container.querySelectorAll('[data-remove-attraction]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editDayDraft.attractions.splice(parseInt(btn.dataset.removeAttraction, 10), 1);
+      renderEditAttractionList();
+    });
+  });
+}
+
+async function handleAttractionSearch() {
+  const q = document.getElementById('attractionSearchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('attractionSearchResults');
+  resultsEl.innerHTML = `<div class="muted" style="font-size:0.75rem;">Searching…</div>`;
+  const results = await searchNominatim(q);
+  if (!results.length) {
+    resultsEl.innerHTML = `<div class="muted" style="font-size:0.75rem;">No results — try a different search.</div>`;
+    return;
+  }
+  resultsEl.innerHTML = `<div class="search-results">` + results.map((r, i) =>
+    `<div class="search-result-item" data-result-idx="${i}">${escapeAttr(r.display_name)}</div>`
+  ).join('') + `</div>`;
+  resultsEl.querySelectorAll('[data-result-idx]').forEach(el => {
+    el.addEventListener('click', () => {
+      const r = results[parseInt(el.dataset.resultIdx, 10)];
+      const shortName = r.display_name.split(',')[0];
+      editDayDraft.attractions.push({ name: shortName, lat: parseFloat(r.lat), lng: parseFloat(r.lon) });
+      // Also add to the shared known-locations pool so it's pickable as a route waypoint too.
+      TRIP.locations[shortName] = { lat: parseFloat(r.lat), lng: parseFloat(r.lon) };
+      if (fbDb) fbDb.ref('trip/locations/' + sanitizeLocationKey(shortName)).set({ name: shortName, lat: parseFloat(r.lat), lng: parseFloat(r.lon) });
+      renderEditAttractionList();
+      populateOvernightSelect();
+      resultsEl.innerHTML = '';
+      document.getElementById('attractionSearchInput').value = '';
+    });
+  });
+}
+
+function saveDayEdit() {
+  editDayDraft.title = document.getElementById('editDayTitle').value.trim() || 'Untitled day';
+  editDayDraft.departureTime = document.getElementById('editDayDeparture').value || '08:00';
+  editDayDraft.overnight = document.getElementById('editDayOvernight').value || null;
+  if (!editDayDraft.date) {
+    const start = new Date(TRIP.project.start_date + 'T00:00:00');
+    start.setDate(start.getDate() + (editDayDraft.day - 1));
+    editDayDraft.date = start.toISOString().slice(0, 10);
+  }
+  if (!fbDb) { alert("Live sync isn't connected yet — changes won't save for the group."); return; }
+  fbDb.ref('trip/itinerary/day' + editDayDraft.day).set(editDayDraft);
+  closeDayEditor();
+}
+
+function deleteDayEdit() {
+  if (!confirm(`Delete Day ${editingDayNumber}? This removes it for everyone.`)) return;
+  if (!fbDb) return;
+  fbDb.ref('trip/itinerary/day' + editingDayNumber).remove();
+  closeDayEditor();
+}
+
+/* ---------------- Stay editor ---------------- */
+
+let editingStayFbKey = null;
+let editStayDraft = null;
+
+function openStayEditor(index) {
+  const stay = index !== null && index !== undefined ? TRIP.accommodation[index] : null;
+  editingStayFbKey = stay ? stay._fbKey : null;
+  editStayDraft = stay ? JSON.parse(JSON.stringify(stay)) : {
+    day: [], city: '', address: '', lat: null, lng: null,
+    host: '', contact: '', checkIn: '16:00', checkOut: '10:00', confirmed: false
+  };
+
+  document.getElementById('stayEditTitle').textContent = stay ? `Edit ${stay.city}` : 'New Stay';
+  document.getElementById('editStayCity').value = editStayDraft.city || '';
+  document.getElementById('editStayAddress').value = editStayDraft.address || '';
+  document.getElementById('editStayHost').value = editStayDraft.host || '';
+  document.getElementById('editStayContact').value = editStayDraft.contact || '';
+  document.getElementById('editStayCheckIn').value = editStayDraft.checkIn || '16:00';
+  document.getElementById('editStayCheckOut').value = editStayDraft.checkOut || '10:00';
+  document.getElementById('editStayConfirmed').checked = !!editStayDraft.confirmed;
+  document.getElementById('stayCoordsPreview').textContent = editStayDraft.lat
+    ? `Map location set (${editStayDraft.lat.toFixed(3)}, ${editStayDraft.lng.toFixed(3)})`
+    : 'No map location set yet — search above';
+  document.getElementById('staySearchInput').value = '';
+  document.getElementById('staySearchResults').innerHTML = '';
+
+  renderStayDaysCheckboxes();
+  document.getElementById('deleteStayBtn').style.display = stay ? 'inline-flex' : 'none';
+
+  closeAllModals();
+  document.getElementById('stayEditModal').style.display = 'flex';
+  suspendTravelPathMap();
+}
+
+function closeStayEditor() {
+  document.getElementById('stayEditModal').style.display = 'none';
+  editingStayFbKey = null;
+  editStayDraft = null;
+  resumeTravelPathMap();
+}
+
+function renderStayDaysCheckboxes() {
+  const container = document.getElementById('editStayDays');
+  container.innerHTML = TRIP.itinerary.map(d => `
+    <label class="day-checkbox">
+      <input type="checkbox" value="${d.day}" ${editStayDraft.day.includes(d.day) ? 'checked' : ''}>
+      Day ${d.day}
+    </label>
+  `).join('');
+}
+
+async function handleStaySearch() {
+  const q = document.getElementById('staySearchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('staySearchResults');
+  resultsEl.innerHTML = `<div class="muted" style="font-size:0.75rem;">Searching…</div>`;
+  const results = await searchNominatim(q);
+  if (!results.length) {
+    resultsEl.innerHTML = `<div class="muted" style="font-size:0.75rem;">No results.</div>`;
+    return;
+  }
+  resultsEl.innerHTML = `<div class="search-results">` + results.map((r, i) =>
+    `<div class="search-result-item" data-result-idx="${i}">${escapeAttr(r.display_name)}</div>`
+  ).join('') + `</div>`;
+  resultsEl.querySelectorAll('[data-result-idx]').forEach(el => {
+    el.addEventListener('click', () => {
+      const r = results[parseInt(el.dataset.resultIdx, 10)];
+      editStayDraft.lat = parseFloat(r.lat);
+      editStayDraft.lng = parseFloat(r.lon);
+      if (!document.getElementById('editStayAddress').value) document.getElementById('editStayAddress').value = r.display_name;
+      document.getElementById('stayCoordsPreview').textContent = `Map location set (${editStayDraft.lat.toFixed(3)}, ${editStayDraft.lng.toFixed(3)})`;
+      resultsEl.innerHTML = '';
+      document.getElementById('staySearchInput').value = '';
+    });
+  });
+}
+
+function saveStayEdit() {
+  editStayDraft.city = document.getElementById('editStayCity').value.trim() || 'Untitled';
+  editStayDraft.address = document.getElementById('editStayAddress').value.trim();
+  editStayDraft.host = document.getElementById('editStayHost').value.trim() || null;
+  editStayDraft.contact = document.getElementById('editStayContact').value.trim() || null;
+  editStayDraft.checkIn = document.getElementById('editStayCheckIn').value || null;
+  editStayDraft.checkOut = document.getElementById('editStayCheckOut').value || null;
+  editStayDraft.confirmed = document.getElementById('editStayConfirmed').checked;
+  editStayDraft.day = Array.from(document.querySelectorAll('#editStayDays input:checked')).map(el => parseInt(el.value, 10));
+  editStayDraft.name = editStayDraft.city + ' Stay';
+  delete editStayDraft._fbKey;
+
+  if (!fbDb) { alert("Live sync isn't connected yet — changes won't save for the group."); return; }
+  const key = editingStayFbKey || ('stay_' + Date.now());
+  fbDb.ref('trip/accommodation/' + key).set(editStayDraft);
+  closeStayEditor();
+}
+
+function deleteStayEdit() {
+  if (!editingStayFbKey) return;
+  if (!confirm('Delete this stay? This removes it for everyone.')) return;
+  if (!fbDb) return;
+  fbDb.ref('trip/accommodation/' + editingStayFbKey).remove();
+  closeStayEditor();
+}
+
+/* ---------------- Wire up editor buttons ---------------- */
+
+function setupItineraryEditors() {
+  const addDayBtn = document.getElementById('addDayBtn');
+  if (addDayBtn) addDayBtn.addEventListener('click', () => openDayEditor(null));
+
+  const closeDayBtn = document.getElementById('closeDayEditModal');
+  if (closeDayBtn) closeDayBtn.addEventListener('click', closeDayEditor);
+
+  const dayModal = document.getElementById('dayEditModal');
+  if (dayModal) dayModal.addEventListener('click', (e) => { if (e.target === dayModal) closeDayEditor(); });
+
+  const addWaypointBtn = document.getElementById('addWaypointBtn');
+  if (addWaypointBtn) addWaypointBtn.addEventListener('click', addWaypointRow);
+
+  const attractionSearchBtn = document.getElementById('attractionSearchBtn');
+  if (attractionSearchBtn) attractionSearchBtn.addEventListener('click', handleAttractionSearch);
+
+  const saveDayBtn = document.getElementById('saveDayBtn');
+  if (saveDayBtn) saveDayBtn.addEventListener('click', saveDayEdit);
+
+  const deleteDayBtn = document.getElementById('deleteDayBtn');
+  if (deleteDayBtn) deleteDayBtn.addEventListener('click', deleteDayEdit);
+
+  const addStayBtn = document.getElementById('addStayBtn');
+  if (addStayBtn) addStayBtn.addEventListener('click', () => openStayEditor(null));
+
+  const closeStayBtn = document.getElementById('closeStayEditModal');
+  if (closeStayBtn) closeStayBtn.addEventListener('click', closeStayEditor);
+
+  const stayModal = document.getElementById('stayEditModal');
+  if (stayModal) stayModal.addEventListener('click', (e) => { if (e.target === stayModal) closeStayEditor(); });
+
+  const staySearchBtn = document.getElementById('staySearchBtn');
+  if (staySearchBtn) staySearchBtn.addEventListener('click', handleStaySearch);
+
+  const saveStayBtn = document.getElementById('saveStayBtn');
+  if (saveStayBtn) saveStayBtn.addEventListener('click', saveStayEdit);
+
+  const deleteStayBtn = document.getElementById('deleteStayBtn');
+  if (deleteStayBtn) deleteStayBtn.addEventListener('click', deleteStayEdit);
 }
