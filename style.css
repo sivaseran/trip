@@ -130,7 +130,7 @@ main {
   background: var(--glen-2);
   border-top: 1px solid rgba(216, 167, 59, 0.18);
   display: flex;
-  z-index: 30;
+  z-index: 205;
 }
 
 .nav-btn {
@@ -548,7 +548,7 @@ main {
   position: fixed;
   inset: 0;
   background: rgba(10, 16, 12, 0.88);
-  z-index: 100;
+  z-index: 210;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -724,6 +724,9 @@ main {
   border-radius: 10px;
   overflow: hidden;
   cursor: pointer;
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
 }
 
 /* ---------------- Small tile row (sunrise / midge) ---------------- */
@@ -756,7 +759,10 @@ main {
 
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
   background: rgba(10, 16, 12, 0.82);
   z-index: 90;
   display: flex;
@@ -767,10 +773,10 @@ main {
 .modal-card {
   background: var(--glen-2);
   border-radius: 18px 18px 0 0;
-  padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+  padding: 20px 18px;
   width: 100%;
   max-width: 640px;
-  max-height: 85vh;
+  max-height: 100%;
   overflow-y: auto;
   border-top: 1px solid rgba(216,167,59,0.25);
 }

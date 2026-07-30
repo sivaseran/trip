@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initFirebase();
   setupSharingToggle();
   updateLocationStatusUI();
+  renderHeaderSubtitle();
   renderHome();
   renderReadiness();
   renderItinerary();
@@ -69,13 +70,26 @@ async function loadTripData() {
 
 /* ---------------- Navigation ---------------- */
 
+function closeAllModals() {
+  const pm = document.getElementById('packingModal');
+  const fm = document.getElementById('forecastModal');
+  if (pm && pm.style.display !== 'none') pm.style.display = 'none';
+  if (fm && fm.style.display !== 'none') fm.style.display = 'none';
+}
+
 function setupNav() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      closeAllModals();
       showScreen(btn.dataset.screen, btn);
       if (btn.dataset.screen === 'screen-map') {
         initMapIfNeeded();
         setTimeout(() => { if (liveMap) liveMap.invalidateSize(); }, 60);
+      }
+      if (btn.dataset.screen === 'screen-home') {
+        resumeTravelPathMap();
+      } else {
+        suspendTravelPathMap();
       }
     });
   });
@@ -109,22 +123,41 @@ function setupMoreMenu() {
 function tickCountdown() {
   const chip = document.getElementById('countdownChip');
   if (!TRIP.project || !TRIP.project.start_date) return;
-  const start = new Date(TRIP.project.start_date + 'T09:00:00');
-  const end = new Date(TRIP.project.end_date + 'T18:00:00');
+  const start = new Date(TRIP.project.start_date + 'T00:00:00');
+  const end = new Date(TRIP.project.end_date + 'T23:59:59');
   const now = new Date();
 
   if (now < start) {
     const diffDays = Math.ceil((start - now) / (1000 * 60 * 60 * 24));
-    chip.textContent = `T-${diffDays}d`;
+    if (diffDays <= 0) chip.textContent = 'Today';
+    else if (diffDays === 1) chip.textContent = '1 more day';
+    else chip.textContent = `${diffDays} more days`;
   } else if (now >= start && now <= end) {
     const dayNum = Math.min(TRIP.project.duration_days, Math.floor((now - start) / (1000*60*60*24)) + 1);
-    chip.textContent = `DAY ${dayNum} OF ${TRIP.project.duration_days}`;
+    if (dayNum === TRIP.project.duration_days) {
+      chip.textContent = 'Final day';
+    } else {
+      const suffixes = ['th', 'st', 'nd', 'rd'];
+      const v = dayNum % 100;
+      const suffix = suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0];
+      chip.textContent = `${dayNum}${suffix} day`;
+    }
   } else {
-    chip.textContent = 'TRIP COMPLETE';
+    chip.textContent = 'Completed';
   }
 }
 
 /* ---------------- Home ---------------- */
+
+function renderHeaderSubtitle() {
+  const el = document.getElementById('headerSubtitle');
+  if (!el || !TRIP.project) return;
+  const start = new Date(TRIP.project.start_date + 'T00:00:00');
+  const end = new Date(TRIP.project.end_date + 'T00:00:00');
+  const fmt = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase();
+  const dateRange = `${start.getDate()}–${fmt(end)} ${start.getFullYear()}`;
+  el.textContent = `${dateRange} · ${TRIP.families.length} FAMILIES · ${TRIP.accommodation.length} ACCOMMODATION`;
+}
 
 function isPreTrip() {
   if (!TRIP.project || !TRIP.project.start_date) return false;
@@ -147,8 +180,8 @@ function renderHome() {
     todayDiv.innerHTML = `<div class="muted">Trip hasn't started yet — check the Itinerary tab to see the full plan.</div>`;
   }
 
-  document.getElementById('statDistance').textContent = '~950';
   document.getElementById('statNights').textContent = TRIP.itinerary.length - 1;
+  loadTotalMiles();
 
   // Accommodation card — reframed if the trip hasn't started
   const accomDiv = document.getElementById('homeAccom');
@@ -254,6 +287,36 @@ function accomCardHTML(stay) {
   `;
 }
 
+async function loadTotalMiles() {
+  const el = document.getElementById('statDistance');
+  const captionEl = document.getElementById('statDistanceCaption');
+  const cacheKey = 'sfrt_total_miles_cache';
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    const c = JSON.parse(cached);
+    if (Date.now() - c.ts < 24 * 60 * 60 * 1000) {
+      el.textContent = `~${c.miles}`;
+      if (captionEl) captionEl.textContent = 'Shared route only — excludes each family\'s drive to/from Moto Knutsford';
+      return;
+    }
+  }
+  el.textContent = '…';
+  try {
+    let total = 0;
+    for (const day of TRIP.itinerary) {
+      const legs = await computeDayLegs(day);
+      legs.forEach(leg => { if (leg.distanceMiles) total += leg.distanceMiles; });
+    }
+    const miles = Math.round(total);
+    localStorage.setItem(cacheKey, JSON.stringify({ miles, ts: Date.now() }));
+    el.textContent = `~${miles}`;
+    if (captionEl) captionEl.textContent = 'Shared route only — excludes each family\'s drive to/from Moto Knutsford';
+  } catch (err) {
+    el.textContent = '--';
+    if (captionEl) captionEl.textContent = 'Could not calculate — check your connection';
+  }
+}
+
 /* ---------------- Countdown card (per-family, live) ---------------- */
 
 function getCountdownTarget() {
@@ -352,9 +415,9 @@ async function initTravelPathMap() {
 
 function updateTravelPathMarkers(data) {
   if (!travelPathMap) return;
-  const colors = ['#D8A73B', '#8D6FA3', '#7EAE8C', '#C1543B', '#5B8FA8'];
   const families = loadFamilies();
   const bounds = [];
+  let sharingCount = 0;
 
   families.forEach((f, i) => {
     const loc = data[f.name];
@@ -362,16 +425,27 @@ function updateTravelPathMarkers(data) {
       if (travelPathMarkers[f.name]) { travelPathMap.removeLayer(travelPathMarkers[f.name]); delete travelPathMarkers[f.name]; }
       return;
     }
+    sharingCount++;
     bounds.push([loc.lat, loc.lng]);
+    const color = FAMILY_COLORS[i % FAMILY_COLORS.length];
     if (travelPathMarkers[f.name]) {
       travelPathMarkers[f.name].setLatLng([loc.lat, loc.lng]);
     } else {
       travelPathMarkers[f.name] = L.circleMarker([loc.lat, loc.lng], {
-        radius: 7, color: colors[i % colors.length], fillColor: colors[i % colors.length], fillOpacity: 0.9, weight: 2
+        radius: 7, color: color, fillColor: color, fillOpacity: 0.9, weight: 2
       }).addTo(travelPathMap);
     }
     travelPathMarkers[f.name].bindTooltip(f.name, { permanent: false });
   });
+
+  const captionEl = document.getElementById('travelPathCaption');
+  if (captionEl) {
+    if (sharingCount === 0) {
+      captionEl.textContent = 'No one sharing yet — turn on in Map tab';
+    } else {
+      captionEl.textContent = `${sharingCount} of ${families.length} sharing · Tap to open the full live Map`;
+    }
+  }
 
   if (bounds.length) {
     travelPathMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 9 });
@@ -720,18 +794,31 @@ function renderHomePackingTile() {
   }
 }
 
+function suspendTravelPathMap() {
+  if (travelPathMap) { travelPathMap.remove(); travelPathMap = null; travelPathMarkers = {}; }
+}
+
+function resumeTravelPathMap() {
+  // Only rebuild if Home is the visible screen — no point rendering it hidden.
+  const homeScreen = document.getElementById('screen-home');
+  if (homeScreen && homeScreen.classList.contains('active')) {
+    initTravelPathMap();
+  }
+}
+
 function setupPackingModal() {
   const tile = document.getElementById('packingTile');
   const modal = document.getElementById('packingModal');
   const closeBtn = document.getElementById('closePackingModal');
   const addBtn = document.getElementById('addPackItemBtn');
   if (tile && modal) tile.addEventListener('click', () => {
+    suspendTravelPathMap();
     populatePackingAssignOptions();
     renderPackingList();
     modal.style.display = 'flex';
   });
-  if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.style.display = 'none');
-  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+  if (closeBtn && modal) closeBtn.addEventListener('click', () => { modal.style.display = 'none'; resumeTravelPathMap(); });
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; resumeTravelPathMap(); } });
   if (addBtn) addBtn.addEventListener('click', addPackingItem);
 }
 
@@ -761,6 +848,9 @@ function loadSettings() {
 /* ---------------- Trip Readiness ---------------- */
 
 function renderReadiness() {
+  const labelEl = document.getElementById('readinessLabel');
+  if (!labelEl) return; // Trip Readiness card removed from Home — nothing to update
+
   const families = loadFamilies();
   const familiesDone = families.filter(f => f.driver && f.startingPostcode).length;
 
@@ -782,7 +872,7 @@ function renderReadiness() {
   const overallTotal = parts.reduce((s, p) => s + p.total, 0);
   const pct = overallTotal ? Math.round((overallDone / overallTotal) * 100) : 0;
 
-  document.getElementById('readinessLabel').textContent = `${pct}% ready for departure`;
+  labelEl.textContent = `${pct}% ready for departure`;
   document.getElementById('readinessFill').style.width = `${pct}%`;
 
   document.getElementById('readinessDetails').innerHTML = parts.map(p => `
@@ -993,9 +1083,13 @@ function setupForecastModal() {
   const btn = document.getElementById('openForecastBtn');
   const modal = document.getElementById('forecastModal');
   const closeBtn = document.getElementById('closeForecastModal');
-  if (btn && modal) btn.addEventListener('click', () => { modal.style.display = 'flex'; loadForecastScreen(); });
-  if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.style.display = 'none');
-  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+  if (btn && modal) btn.addEventListener('click', () => {
+    suspendTravelPathMap();
+    modal.style.display = 'flex';
+    loadForecastScreen();
+  });
+  if (closeBtn && modal) closeBtn.addEventListener('click', () => { modal.style.display = 'none'; resumeTravelPathMap(); });
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; resumeTravelPathMap(); } });
 }
 
 function timeAgo(ts) {
@@ -1138,6 +1232,7 @@ function setupIdentity() {
 }
 
 function showIdentityOverlay() {
+  suspendTravelPathMap();
   const overlay = document.getElementById('identityOverlay');
   const opts = document.getElementById('identityOptions');
   opts.innerHTML = '';
@@ -1274,6 +1369,14 @@ function initMapIfNeeded() {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(liveMap);
 
+  const routeCoords = TRIP.travelPath
+    .map(stop => TRIP.locations[stop.label])
+    .filter(Boolean)
+    .map(l => [l.lat, l.lng]);
+  if (routeCoords.length) {
+    L.polyline(routeCoords, { color: '#D8A73B', weight: 3, dashArray: '6,6', opacity: 0.7 }).addTo(liveMap);
+  }
+
   if (typeof LIVE_LOCATION_ENABLED !== 'undefined' && LIVE_LOCATION_ENABLED && fbDb) {
     fbDb.ref('locations').on('value', (snapshot) => {
       const data = snapshot.val() || {};
@@ -1288,13 +1391,24 @@ function initMapIfNeeded() {
   }
 }
 
+const FAMILY_COLORS = ['#D8A73B', '#8D6FA3', '#7EAE8C', '#C1543B', '#5B8FA8'];
+
+function familyColor(name) {
+  const families = loadFamilies();
+  const idx = families.findIndex(f => f.name === name);
+  return FAMILY_COLORS[idx >= 0 ? idx % FAMILY_COLORS.length : 0];
+}
+
 function updateMapMarkers(data) {
   Object.entries(data).forEach(([name, loc]) => {
     if (!loc || typeof loc.lat !== 'number') return;
+    const color = familyColor(name);
     if (mapMarkers[name]) {
       mapMarkers[name].setLatLng([loc.lat, loc.lng]);
     } else {
-      mapMarkers[name] = L.marker([loc.lat, loc.lng]).addTo(liveMap);
+      mapMarkers[name] = L.circleMarker([loc.lat, loc.lng], {
+        radius: 9, color: color, fillColor: color, fillOpacity: 0.9, weight: 2
+      }).addTo(liveMap);
     }
     mapMarkers[name].bindPopup(`${name} · ${timeAgo(loc.ts)}`);
   });
@@ -1303,10 +1417,10 @@ function updateMapMarkers(data) {
 function renderFamilyLocationList(data) {
   const container = document.getElementById('familyLocationList');
   const families = loadFamilies();
-  container.innerHTML = families.map(f => {
+  container.innerHTML = families.map((f, i) => {
     const loc = data[f.name];
     return `<div class="family-location-row">
-      <span class="family-location-row__name">${f.name}</span>
+      <span class="family-location-row__name"><span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:${FAMILY_COLORS[i % FAMILY_COLORS.length]}; margin-right:7px;"></span>${f.name}</span>
       <span class="family-location-row__meta">${loc ? timeAgo(loc.ts) : 'No data yet'}</span>
     </div>`;
   }).join('');

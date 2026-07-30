@@ -33,23 +33,13 @@
     <div class="app-title"><span class="flag">🏴</span> Scotland Road Trip</div>
     <div class="countdown-chip" id="countdownChip">--</div>
   </div>
-  <div class="app-subtitle" id="headerSubtitle">1–6 AUG 2026 · 5 FAMILIES · 13 TRAVELLERS</div>
+  <div class="app-subtitle" id="headerSubtitle">Loading…</div>
 </header>
 
 <main>
 
   <!-- ============ HOME ============ -->
   <section class="screen active" id="screen-home">
-
-    <div class="card">
-      <div class="card__title">
-        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M2 12l10 10L22 12"/></svg>
-        TRIP READINESS
-      </div>
-      <div class="muted" id="readinessLabel" style="margin-bottom:4px;">Checking…</div>
-      <div class="progress-bar"><div class="progress-bar__fill" id="readinessFill" style="width:0%;"></div></div>
-      <div id="readinessDetails" style="margin-top:10px;"></div>
-    </div>
 
     <div class="card packing-tile" id="packingTile">
       <div class="card__title">
@@ -67,13 +57,20 @@
       <div id="countdownCard"><div class="muted">Loading…</div></div>
     </div>
 
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat"><div class="stat__value" id="statDistance">--</div><div class="stat__label">Total Miles</div></div>
+      <div class="stat"><div class="stat__value" id="statFuelStops">3</div><div class="stat__label">Fuel Stops</div></div>
+      <div class="stat"><div class="stat__value" id="statNights">5</div><div class="stat__label">Nights Away</div></div>
+    </div>
+    <div class="muted" id="statDistanceCaption" style="margin:-8px 2px 14px; font-size:0.65rem;"></div>
+
     <div class="card" style="padding:8px;">
       <div class="card__title" style="padding:8px 8px 0;">
         <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
         TRAVEL PATH
       </div>
       <div id="travelPathMap" class="travel-path-map"></div>
-      <div class="muted" style="padding:8px; font-size:0.68rem;">Tap to open the full live Map</div>
+      <div class="muted" id="travelPathCaption" style="padding:8px; font-size:0.68rem;">Checking who's sharing…</div>
     </div>
 
     <div class="card">
@@ -90,12 +87,6 @@
         CURRENT LEG
       </div>
       <div id="currentLegCard" class="muted">Loading route info…</div>
-    </div>
-
-    <div class="stat-grid" style="margin-bottom:14px;">
-      <div class="stat"><div class="stat__value" id="statDistance">--</div><div class="stat__label">Total Miles</div></div>
-      <div class="stat"><div class="stat__value" id="statFuelStops">3</div><div class="stat__label">Fuel Stops</div></div>
-      <div class="stat"><div class="stat__value" id="statNights">5</div><div class="stat__label">Nights Away</div></div>
     </div>
 
     <div class="card">
